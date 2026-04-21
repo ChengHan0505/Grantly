@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.core.config import settings
-from src.database.db import seed_sample_grants
-from src.database.models import SessionLocal, init_db
-from src.routes import grants_router, health_router, profiles_router
+from backend.src.core.config import settings
+from backend.src.database.db import seed_sample_grants
+from backend.src.database.models import SessionLocal, init_db
+from backend.src.routes import grants_router, health_router, profiles_router
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
