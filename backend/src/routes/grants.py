@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from src.api.schemas import GrantApplicationRead, GrantCreate, GrantRead, RankedGrantRead
-from src.database.db import build_grant_application_snapshot, create_grant, get_db, get_grant_by_id, rank_grants_for_user
+from backend.src.api.schemas import GrantApplicationRead, GrantCreate, GrantRead, RankedGrantRead
+from backend.src.database.db import build_grant_application_snapshot, create_grant, get_db, get_grant_by_id, rank_grants_for_user
 
 
 router = APIRouter(prefix="/grants", tags=["grants"])
