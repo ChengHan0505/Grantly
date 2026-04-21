@@ -1,0 +1,37 @@
+# Introduction
+This project "Grantly" is about a Grant Hunter mainly targeting SMEs and other big companies. It has agents to scrap the Internet to search for suitable grant offered by the governments or other private organization.
+
+## Features
+1) User generates a formatted company profile by answering a list of questions such as target revenue, and uploading their business related documents such as SSM and other referential documents.
+
+2) System scrapper will continuously scrap through the Internet to find any related grant for business and store them into a database.
+
+3) AI agent analyse and display a list of grants which suit the company well based on the company profile generated before.
+
+4) User can select any interested grant to apply for it. There's another database dedicated for the user to upload all business related documents such as SSM and financial statement.
+
+5) When applying for a grant, the AI agent will summarize a list of requirements or documents required to submit, and display them to the user once they selects an interested grant.
+
+6) Another AI agent will be in charge of generating essential documents that it can generate such as a proposal pdf or a pitch deck.
+
+7) After having all the essential documents ready, the user will need to download all documents from out app, and manually upload the files and apply for the grant in the official website (as AI could not pass the human verification test).
+
+## AI Agents
+1) **Extractor Agent:** Extracts the information from company documents and the list of questions, then it will generate a formatted company profile that can explains the background of the company.
+
+2) **Scout Agent:** Scraps in the Internet constantly 8 hours
+
+# Workflow
+This section explains the end-to-end workflow from registering account to successfully applying grant.
+
+## User Account Generating
+The user logs in/registers a user account.
+
+## Company Profile Setting
+The user sets up a company profile, uploads essential company docs (e.g. SSM certs, financial statements …) assisted by a checklist of questions (e.g. target revenue, nationality…). An AI agent (Extractor agent) will extract the information and generate a formatted company profile (that will be exhibited in the “Company Profile” tab).
+
+## Grant Scapping
+The user launches a scrapper (Scout agent) that scraps through the Internet to search for all grants information (both eligible and not eligible). Then the grants are stored and displayed in the “Grant” tab. Outdated grants will be removed from the database after each scrap. After scrapping the user needs to force the Scout agent to stop scrapping (maximum scrapping limit is 8 hours). An (Evaluator agent) will then check the company profile and each grant found to check how the company is eligible for the grant, then generate a tag (status) beside each grant in the grant list.
+
+## Grant Application
+The user reviews the “Grant” tab, looks for an interested grant, clicks into it. The UI will lead the user to another endpoint. In that endpoint, it will display a checklist of documents needed to be submitted in order to apply for the grant with a completion mark beside each checklist item that indicates whether a required document is present or absent. For items that AI can’t generate (like financial statements), there’re just a completion mark and an upload button attached to the item; for items that AI can generate (like pitch deck and proposal), there’s an additional button called generate, that can call the (Drafter agent) to generate the document. After all, the user can download all documents needed to apply that grant into a zip file, the downloaded zip file is ready to be submitted to the official portal manually by the user himself (because AI can't pass the “Human Verification” barrier at the official portals.
