@@ -125,7 +125,7 @@ async def _ping() -> None:
     client = GLMClient()
     result = await client.generate_json(
         system_prompt=(
-            "You are a connection-test assistant for the Malaysia SME Grant Copilot."
+            "You are a connection-test assistant for the Grantly."
         ),
         user_prompt=(
             'Return a JSON object with a single key "greeting" whose value is '
