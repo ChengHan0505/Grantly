@@ -46,7 +46,7 @@ async def run_extractor(raw_text: str) -> SMEProfile:
 
 
 _DUMMY_TEXT = (
-    "Welcome to TechBina Sdn Bhd (SSM: 1234567-V). We are a local software "
+    "Welcome to YAP Sdn Bhd (SSM: 1234567-V). We are a local software "
     "development agency in the ICT sector, operating for 24 months now. We have "
     "a lean team of 5 full-time employees and are 100% locally owned. We are "
     "looking to apply for a grant. Our total project cost is estimated at "
