@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from zhipuai import ZhipuAI
 
 
-DEFAULT_MODEL = "glm-4"
+DEFAULT_MODEL = "ilmu-glm-5.1"
 
 _JSON_FENCE_RE = re.compile(
     r"^\s*```(?:json)?\s*(?P<body>.*?)\s*```\s*$",
@@ -78,7 +78,7 @@ class GLMClient:
             )
         except Exception as exc:
             raise GLMClientError(f"GLM API call failed: {exc}") from exc
-            
+
         try:
             content: str = response.choices[0].message.content
         except (AttributeError, IndexError, TypeError) as exc:
