@@ -1,0 +1,88 @@
+{
+  "generated_at": "2026-04-23T00:00:00Z",
+  "source": "targeted_mtdc_manual_structuring",
+  "mtdc": {
+    "main_page": {
+      "url": "https://mtdc.com.my/tech-investment/",
+      "title": "Technology Investment",
+      "summary": "MTDC manages development and investment funds from early to growth stage for Malaysian SMEs/startups, with focus on six sectors including E&E/semiconductor, 4IR, healthcare/life sciences, food security, green economy, and aerospace/mobility."
+    },
+    "commercial_funds": [
+      {
+        "name": "Business Growth Fund (BGF)",
+        "url": "https://mtdc.com.my/business-growth-fund/",
+        "introduction": "Supports growth-stage technology companies to expand production capacity, market penetration, and corporate governance readiness.",
+        "basic_eligibility": [
+          "Incorporated under Companies Act 2016",
+          "Technology-based company with at least 51% Malaysian ownership",
+          "Revenue exceeded RM1.5 million and not in loss position"
+        ],
+        "funding_quantum": "Up to RM10 million",
+        "funding_period": "5 years",
+        "funding_instrument": "Equity funding via Redeemable Convertible Preference Shares (RCPS)",
+        "application_hint": "Pitch for funds via MTDC registration"
+      },
+      {
+        "name": "Business Start-Up Fund (BSF)",
+        "url": "https://mtdc.com.my/business-start-up-fund/",
+        "introduction": "Early-stage financing for technology-based companies using a mix of loan/equity-style instruments to remove growth barriers.",
+        "basic_eligibility": [
+          "Incorporated under Companies Act 2016",
+          "Technology-based company with at least 51% Malaysian ownership"
+        ],
+        "funding_quantum": "Up to RM5 million or 90% of total project cost (whichever is lower)",
+        "funding_period": "18 months grace period and 5 years repayment period",
+        "funding_instrument": "Interest-free Convertible Promissory Notes (CPN) and/or Preference Shares; CPN may convert to RCPS",
+        "application_hint": "Pitch to MTDC via registration page"
+      },
+      {
+        "name": "MTDC-pitchIN Equity Crowdfunding",
+        "url": "https://mtdc.com.my/mtdc-pitchin-equity-crowdfunding/",
+        "introduction": "ECF programme to facilitate fundraising for local technology companies through the pitchIN platform.",
+        "basic_eligibility": [
+          "Incorporated in Malaysia",
+          "Majority Malaysian-owned",
+          "IP-backed technology",
+          "Commercial-ready prototype",
+          "Qualified to launch campaign through pitchIN"
+        ],
+        "participation_amount": "Up to 30% of fund to be raised or maximum RM0.9 million per campaign",
+        "investment_tenure": "3 to 5 years",
+        "investment_instrument": "Redeemable Convertible Preference Shares (RCPS)",
+        "application_hint": "Pitch to MTDC / qualify through pitchIN campaign flow"
+      },
+      {
+        "name": "MTDC-MicroLEAP Peer-to-Peer",
+        "url": "https://mtdc.com.my/mtdc-microleap-peer-to-peer/",
+        "introduction": "P2P financing programme enabling local technology companies to raise crowd-sourced financing via microLEAP.",
+        "basic_eligibility": [
+          "Incorporated in Malaysia",
+          "Majority Malaysian-owned",
+          "IP-backed technology",
+          "Commercial-ready prototype",
+          "Qualified to launch P2P campaign through microLEAP"
+        ],
+        "participation_amount": "Up to 30% of fund to be raised or maximum RM500,000 per campaign",
+        "investment_instrument": "Islamic Investment Note",
+        "profit_rate": "Depends on P2P platform-determined rate",
+        "application_hint": "Pitch to MTDC / qualify through microLEAP campaign flow"
+      },
+      {
+        "name": "Aerospace and Electrical & Electronic Ecosystem Investment Fund (AEEEIF)",
+        "url": "https://www.mtdc.com.my/aerospace-fund/",
+        "introduction": "Funding for high-growth technology-based aerospace manufacturing and MRO companies, with equity and interest subsidisation.",
+        "basic_eligibility": [
+          "Incorporated in Malaysia",
+          "Relevant certification: AS9100D (Aerospace IAQG) and/or CAAM Part 145 (MRO)",
+          "Minimum 30% growth in human capital technical skills during tenure",
+          "At least 51% Malaysian equity ownership",
+          "Maintain minimum PBT margin of 5% throughout tenure"
+        ],
+        "funding_quantum": "Up to RM10 million per company",
+        "funding_period": "5 years",
+        "funding_instrument": "Redeemable Convertible Preference Shares (RCPS)",
+        "application_hint": "Apply/pitch via MTDC channels"
+      }
+    ]
+  }
+}
