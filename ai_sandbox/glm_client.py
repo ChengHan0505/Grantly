@@ -68,7 +68,9 @@ class GLMClient:
         ]
 
         try:
-            response = await self.client.chat.completions.create(
+            # Offload the synchronous SDK call to a background thread
+            response = await asyncio.to_thread(
+                self.client.chat.completions.create,
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
@@ -76,7 +78,7 @@ class GLMClient:
             )
         except Exception as exc:
             raise GLMClientError(f"GLM API call failed: {exc}") from exc
-
+            
         try:
             content: str = response.choices[0].message.content
         except (AttributeError, IndexError, TypeError) as exc:
