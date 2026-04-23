@@ -157,6 +157,48 @@ def create_grant(db: Session, grant_data: dict) -> Grant:
     return grant
 
 
+def upsert_grant_from_scout(db: Session, grant_data: dict) -> tuple[Grant, bool]:
+    requirements_data = grant_data.pop("requirements", [])
+    source_url = grant_data.get("source_url")
+    title = grant_data.get("title")
+    provider_name = grant_data.get("provider_name")
+
+    grant = None
+    if source_url:
+        grant = db.query(Grant).filter(Grant.source_url == source_url).first()
+    if grant is None and title and provider_name:
+        grant = (
+            db.query(Grant)
+            .filter(Grant.title == title)
+            .filter(Grant.provider_name == provider_name)
+            .first()
+        )
+
+    created = False
+    if grant is None:
+        grant = Grant(**grant_data)
+        db.add(grant)
+        db.flush()
+        created = True
+    else:
+        for key, value in grant_data.items():
+            setattr(grant, key, value)
+        db.query(GrantRequirement).filter(GrantRequirement.grant_id == grant.id).delete()
+
+    for requirement in requirements_data:
+        db.add(
+            GrantRequirement(
+                grant_id=grant.id,
+                name=requirement["name"],
+                description=requirement.get("description"),
+                source_type=RequirementSource(requirement["source_type"]),
+                document_type=requirement.get("document_type"),
+                is_required=requirement.get("is_required", True),
+            )
+        )
+    return grant, created
+
+
 def seed_sample_grants(db: Session) -> None:
     if db.query(Grant).count() > 0:
         return
