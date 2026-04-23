@@ -16,8 +16,8 @@ from typing import Any, Optional
 from dotenv import load_dotenv
 from zhipuai import ZhipuAI
 
-
-DEFAULT_MODEL = "glm-4"
+DEFAULT_MODEL = "ilmu-glm-5.1"
+ILMU_BASE_URL = "https://api.ilmu.ai/v1"
 
 _JSON_FENCE_RE = re.compile(
     r"^\s*```(?:json)?\s*(?P<body>.*?)\s*```\s*$",
@@ -46,7 +46,7 @@ class GLMClient:
 
         self.api_key = resolved_key
         self.model = model
-        self.client = ZhipuAI(api_key=self.api_key)
+        self.client = ZhipuAI(api_key=self.api_key, base_url=ILMU_BASE_URL)
 
     async def generate_json(
         self,
