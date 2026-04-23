@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from src.api.schemas import CompanyProfileRead, CompanyProfileUpsert, DocumentRead, SystemStateRead, UserCreate, UserRead
-from src.database.db import create_user, get_company_documents, get_company_profile, get_db, get_user_by_id, upsert_company_profile
-from src.database.models import SystemState, User
+from backend.src.api.schemas import CompanyProfileRead, CompanyProfileUpsert, DocumentRead, SystemStateRead, UserCreate, UserRead
+from backend.src.database.db import create_user, get_company_documents, get_company_profile, get_db, get_user_by_id, upsert_company_profile
+from backend.src.database.models import SystemState, User
 
 
 router = APIRouter(prefix="/users", tags=["users"])

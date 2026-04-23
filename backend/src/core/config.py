@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     scout_user_agent: str = "GrantlyScout/1.0 (+https://grantly.local)"
     scout_results_dir: str = "data/scout_runs"
     scout_report_path: str = "data/scout_runs/last_report.json"
+    model_name: str = "ilmu-glm-5.1"
 
 
 settings = Settings()

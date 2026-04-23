@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.database.models import CompanyDocument, Grant, GrantRequirement, RequirementSource, SMEProfile
+from backend.src.database.models import CompanyDocument, Grant, GrantRequirement, RequirementSource, SMEProfile
 
 
 def evaluate_profile_readiness(profile_data: dict, documents: list[dict]) -> float:
