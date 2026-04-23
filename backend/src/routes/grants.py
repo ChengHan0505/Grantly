@@ -8,6 +8,8 @@ from src.database.db import build_grant_application_snapshot, create_grant, get_
 from src.scout.runner import run_scout
 from src.scout.storage import read_last_report
 from src.scout.sources import check_sources_health_from_sources, load_sources_from_curated_outputs
+from backend.src.api.schemas import GrantApplicationRead, GrantCreate, GrantRead, RankedGrantRead
+from backend.src.database.db import build_grant_application_snapshot, create_grant, get_db, get_grant_by_id, rank_grants_for_user
 
 
 router = APIRouter(prefix="/grants", tags=["grants"])

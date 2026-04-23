@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.database.models import RequirementSource
+from backend.src.database.models import RequirementSource
 
 
 class UserCreate(BaseModel):

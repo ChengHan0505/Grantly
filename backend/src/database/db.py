@@ -4,8 +4,8 @@ from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
-from src.core.dag_router import build_application_checklist, evaluate_grant_match, evaluate_profile_readiness
-from src.database.models import (
+from backend.src.core.dag_router import build_application_checklist, evaluate_grant_match, evaluate_profile_readiness
+from backend.src.database.models import (
     CompanyDocument,
     Grant,
     GrantRequirement,
