@@ -1,0 +1,83 @@
+{
+  "generated_at": "2026-04-23T00:00:00Z",
+  "source": "targeted_cradle_manual_structuring",
+  "cradle": {
+    "organization": "Cradle Fund",
+    "fund_types": [
+      {
+        "name": "CIP Spark",
+        "url": "https://www.cradle.com.my/cip-spark/",
+        "grant_type": "Conditional Development / Pre-Seed Grant",
+        "funding_amount_max": "RM150,000",
+        "funding_period_max": "18 months",
+        "target_stage": [
+          "Ideation",
+          "Prototype development",
+          "Product enhancement",
+          "Pre-commercialisation"
+        ],
+        "applicant_type": [
+          "Individuals",
+          "LLP",
+          "Enterprise",
+          "Sdn Bhd"
+        ],
+        "individual_eligibility": [
+          "Minimum 2 individuals in a team (at least 1 Malaysian)",
+          "Minimum 1 individual residing in Malaysia (Malaysian or non-Malaysian)"
+        ],
+        "company_eligibility": [
+          "Company age less than 5 years",
+          "Accumulated revenue below RM3 million",
+          "For less than 51% Malaysian ownership, majority employees must be Malaysian",
+          "Must have IP rights or valid licensed IP arrangement",
+          "No other company/entity with 25% or more shareholding",
+          "No paid-up capital requirement"
+        ],
+        "fund_utilisation_rule": "At least 60% for developmental expenses and up to 40% for non-developmental/commercialisation expenses.",
+        "disbursement_method": "Advance payment and reimbursement, subject to milestones.",
+        "deliverables": [
+          "Functional prototype or MVP by end of funding",
+          "Demo session",
+          "Development progress reporting"
+        ],
+        "application_process_note": "Typical timeline after pitching is around 2 to 4 months, subject to complete documentation."
+      },
+      {
+        "name": "CIP Sprint",
+        "url": "https://www.cradle.com.my/cip-sprint/",
+        "grant_type": "Conditional Convertible Commercialisation Grant",
+        "funding_amount_max": "RM600,000",
+        "funding_period_max": "18 months",
+        "target_stage": [
+          "Commercialisation",
+          "Product enhancement",
+          "Market access",
+          "Market expansion"
+        ],
+        "applicant_type": [
+          "Sdn Bhd (including SMEs, university spin-offs, research institute spin-offs)"
+        ],
+        "company_eligibility": [
+          "Must be Sdn Bhd",
+          "Minimum 2 directors, with at least 1 Malaysian and at least 1 residing in Malaysia",
+          "Company age less than 7 years",
+          "Accumulated revenue below RM5 million",
+          "For less than 51% Malaysian ownership, majority employees must be Malaysian",
+          "Must have IP rights or valid licensed IP arrangement",
+          "No other company/entity with 25% or more shareholding",
+          "Minimum paid-up capital RM10,000"
+        ],
+        "fund_utilisation_rule": "At least 60% for commercialisation expenses and up to 40% for product development/enhancement and other expenses.",
+        "disbursement_method": "Advance payment and reimbursement, subject to milestone deliverables.",
+        "application_process_note": "Typical timeline after pitching is around 2 to 4 months, subject to complete documentation.",
+        "traction_note": "Commercial traction data can strengthen application; recipients are expected to meet traction/revenue milestones during funding."
+      }
+    ],
+    "contact": {
+      "email": "enquiries@cradle.com.my",
+      "phone": "+603 4045 8600",
+      "address": "Level 20, Sunway Putra Tower, 100 Jalan Putra, 50350 Kuala Lumpur"
+    }
+  }
+}

@@ -6,7 +6,7 @@
 
 **Base URL:** `http://localhost:8000`  
 **Version:** 1.0.0  
-**Model:** GLM-5.1-Agentic
+**Model:** ilmu-glm-5.1
 
 ---
 
@@ -63,7 +63,7 @@ Check if the server is running and get system information.
 ```json
 {
   "status": "online",
-  "model": "GLM-5.1-Agentic",
+  "model": "ilmu-glm-5.1",
   "service": "Grantly"
 }
 ```
