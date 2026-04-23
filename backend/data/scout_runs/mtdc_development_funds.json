@@ -1,0 +1,120 @@
+{
+  "generated_at": "2026-04-23T00:00:00Z",
+  "source": "targeted_mtdc_manual_structuring",
+  "mtdc": {
+    "category": "development_funds",
+    "main_page": {
+      "url": "https://mtdc.com.my/developmental-fund/",
+      "title": "Developmental Fund",
+      "summary": "MTDC developmental funds support early-stage local technologies through grants and hybrid funding to help innovators validate, commercialise, and scale solutions."
+    },
+    "development_funds": [
+      {
+        "name": "National Technology & Innovation Sandbox Fund (NTIS Fund)",
+        "url": "https://mtdc.com.my/national-technology-innovation-sandbox-fund/",
+        "introduction": "NTIS provides a live sandbox environment for innovators to test products/services/business models with regulatory relaxations; MTDC funds eligible NTIS activities.",
+        "basic_eligibility": [
+          "Malaysian individual or Malaysian-owned company",
+          "Must be successfully accepted into NTIS"
+        ],
+        "types_of_scheme": [
+          "Single Site Sandbox: 100% grant up to RM250,000; 6 months",
+          "Multiple Site Sandbox: up to 70% grant capped at RM500,000; 6 months",
+          "Commercialisation Sandbox: up to 70% (grant + CPN) capped at RM4 million; 18 months",
+          "Corporate Sandbox: 1:1 matching funding with approved corporate partner; duration based on project"
+        ],
+        "scope_of_funding": [
+          "Technology licensing and consultation",
+          "Regulatory compliance and product registration",
+          "Production and outsourcing costs",
+          "IP-related costs",
+          "Operational expenditure",
+          "For sandbox 3/4: machinery, equipment, marketing and promotional activities"
+        ],
+        "funding_period": "Sandbox 1/2 up to 6 months, Sandbox 3 up to 18 months, Sandbox 4 depends on scope",
+        "contact_email": "devfund@mtdc.com.my",
+        "application_hint": "Apply via NTIS application website"
+      },
+      {
+        "name": "Halal Technology Development Fund (HTDF)",
+        "url": "https://mtdc.com.my/halal-technology-development-fund/",
+        "introduction": "Hybrid matching funding (Grant + Convertible Promissory Note) for technology-enabled halal products/services for local and export markets.",
+        "sub_schemes": [
+          "HTDF 1: business expansion for local halal market",
+          "HTDF 2: business expansion for international halal market"
+        ],
+        "basic_eligibility": [
+          "Company incorporated under Companies Act 1965",
+          "At least 60% Malaysian ownership",
+          "Qualifies as SME (SME Corp Malaysia guideline)",
+          "Has halal certification from JAKIM",
+          "Not a subsidiary of GLC/MNC",
+          "Demonstrates business sustainability and viability",
+          "HTDF 2 additionally requires products/services already exported"
+        ],
+        "funding_quantum": [
+          "HTDF 1 up to RM2.0 million (grant + CPN)",
+          "HTDF 2 up to RM4.0 million (grant + CPN)"
+        ],
+        "funding_sectors": [
+          "Food and Beverage",
+          "Ingredients and Additives",
+          "Cosmetics and Personal Care",
+          "Pharmaceutical and Nutraceuticals",
+          "Innovative halal products and services"
+        ],
+        "project_duration": "6 years total (2 years implementation + 4 years repayment)",
+        "processing_fee": "RM3,500 per application",
+        "contact_email": "devfund@mtdc.com.my"
+      },
+      {
+        "name": "Dana Mudahcara MySTI",
+        "url": "https://mtdc.com.my/dana-mudah-cara-mysti/",
+        "introduction": "Supports Malaysian startups/SMEs with own R&D technologies to fulfill government procurement opportunities by covering project production costs.",
+        "basic_eligibility": [
+          "Company incorporated under Companies Act 2016",
+          "At least 51% Malaysian-owned",
+          "Has MySTI logo certification and MOF ePerolehan registration",
+          "Eligible for government procurement and/or has government offer to produce products/services"
+        ],
+        "processing_fee": "No processing fee",
+        "funding_quantum": "70% of project cost or RM1,000,000 grant (whichever is lower)",
+        "funding_period": "3 to 12 months, ending when procurement activity is completed",
+        "funding_instrument": "Grant, with potential conversion to preference shares upon project completion",
+        "scope_of_funding": [
+          "Product registration and regulatory compliance",
+          "Capital expenditure (machinery and equipment)",
+          "Production costs (raw materials)",
+          "IP-related expenses",
+          "Outsourcing costs",
+          "Product/service upgrade costs"
+        ],
+        "contact_email": "devfund@mtdc.com.my"
+      },
+      {
+        "name": "Dana Uji Beli MySTI (DUB)",
+        "url": "https://mtdc.com.my/dana-ujibeli-mysti/",
+        "introduction": "Introduced in 2024 under MOSTI MySTI to support trial deployment of local R&D products/services at government ministries/agencies before wider procurement.",
+        "basic_eligibility": [
+          "Has MySTI logo and certification",
+          "Registered with government e-Procurement system",
+          "Has Letter of Intent/Indication of Intent from government ministry/agency",
+          "Locally registered entity under Companies Act 2016",
+          "At least 51% Malaysian-owned"
+        ],
+        "eligible_items": [
+          "Rental/subscription for trial use",
+          "Consumables/disposable products for trial",
+          "Trial implementation costs",
+          "Other approved project-related costs"
+        ],
+        "funding_quantum": "Depends on total project cost and JKD approval",
+        "project_duration": "Not more than 6 months",
+        "funding_instrument": "Grant",
+        "disbursement_process": "Paid based on approved quotations directly to applicant company",
+        "monitoring_process": "Monthly Performance Report required throughout trial period",
+        "contact_email": "devfund@mtdc.com.my"
+      }
+    ]
+  }
+}

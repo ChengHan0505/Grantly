@@ -1,0 +1,305 @@
+{
+  "generated_at": "2026-04-23T00:00:00Z",
+  "source": "targeted_mdec_manual_structuring",
+  "mdec": {
+    "organization": "Malaysia Digital Economy Corporation (MDEC)",
+    "grants": [
+      {
+        "name": "Malaysia Digital Catalyst Grant (MDCG)",
+        "url": "https://www.mdec.my/grants/mdcg",
+        "objective": "Catalyse co-creation, problem-solving, development and commercialisation of disruptive and sustainable solutions with end-user partners within Malaysia Digital promoted sectors.",
+        "promoted_sectors": [
+          "Digital Agriculture",
+          "Digital Services",
+          "Digital Cities",
+          "Digital Health",
+          "Digital Finance",
+          "Digital Trade",
+          "Digital Content",
+          "Digital Tourism",
+          "Islamic Digital Economy"
+        ],
+        "tech_enablers": [
+          "Artificial Intelligence and Big Data Analytics",
+          "Blockchain",
+          "Cloud and Data Centre",
+          "Cybersecurity",
+          "DroneTech",
+          "Internet of Things",
+          "Robotics, Automation and Extended Reality",
+          "Creative Media Technology (XR/MR)",
+          "Integrated Circuit design and embedded software",
+          "Advanced network connectivity and telecommunication technology"
+        ],
+        "grant_amount": {
+          "local_owned_company": "Up to 50% of total project cost or RM1,000,000 (whichever is lower)",
+          "majority_foreign_owned_company": "Up to 30% of total project cost or RM1,000,000 (whichever is lower)",
+          "project_duration": "Up to 1 year"
+        },
+        "eligibility": {
+          "local_company": [
+            "Incorporated in Malaysia under Companies Act 1965/2016",
+            "Minimum issued share capital RM50,000",
+            "At least 51% Malaysian equity"
+          ],
+          "majority_foreign_company": [
+            "Incorporated in Malaysia under Companies Act 1965/2016",
+            "Minimum issued share capital RM500,000"
+          ],
+          "other": [
+            "At least 1 year in operation",
+            "Must not be under liquidation/winding-up/bankruptcy",
+            "Must declare litigation/blacklist/conflict disclosures",
+            "Must be MD or MSC Malaysia status company",
+            "No clawback dues to MDEC from prior grants"
+          ]
+        },
+        "specific_conditions": [
+          "Applicant/recipient must have no ownership/control relationship with end-user partner",
+          "Project must demonstrate new IP creation and/or commercial value"
+        ],
+        "application_documents_required": [
+          "Project Proposal Pitch Deck (MDEC template)",
+          "Latest audited financial statement (1 year)",
+          "Board resolution appointing authorised signatory",
+          "Awards/recognition (past 5 years, if any)",
+          "Company profile and project proposal",
+          "Integrity Declaration Form",
+          "Outsourcing declarations/agreements (if applicable, capped at 20%)",
+          "Proof of completion/non-overlap for past/on-going government grants",
+          "End-user partner support/funding evidence (agreement/MOU/LOI/PO)"
+        ],
+        "application_process": [
+          "Register and log in to Malaysia Digital Platform",
+          "Create New Application and select Grant",
+          "Select Grant Type (one application)",
+          "Fill form and upload required supporting documents",
+          "Submit application",
+          "Completeness/compliance review by MDEC",
+          "Pitching session",
+          "Approval process",
+          "Application result notification"
+        ]
+      },
+      {
+        "name": "Digital Content Grant (DCG) - Main",
+        "url": "https://www.mdec.my/grants/dcg",
+        "overview": "Government initiative (started in 2016) to support local creative content companies in animation, digital games, digital comics, and creative technology.",
+        "grant_types": [
+          {
+            "name": "Mini Grant",
+            "ceiling_amount": "RM150,000"
+          },
+          {
+            "name": "Prime Grant",
+            "ceiling_amount": "RM500,000"
+          },
+          {
+            "name": "Marketing and Commercialisation Grant",
+            "ceiling_amount": "RM300,000"
+          }
+        ],
+        "application_process": [
+          "Register and log in to Malaysia Digital Platform",
+          "Create New Application and select Grant",
+          "Select Grant Type",
+          "Fill out application and upload documents",
+          "Submit",
+          "Completeness/compliance review",
+          "Pitching",
+          "Approval",
+          "Result notification"
+        ],
+        "eligible_expenses_summary": [
+          "Direct project salary costs (with role exclusions)",
+          "IT hardware/software linked to project",
+          "IP protection costs",
+          "Marketing/commercialisation/licensing/distribution",
+          "Outsourcing (subject to cap and non-related-party conditions)"
+        ],
+        "non_eligible_expenses_summary": [
+          "Taxes/duties and general operating overheads",
+          "General-use devices/furniture",
+          "Travel and non-project expenses",
+          "Debt, penalties, litigation and bank/FX related charges",
+          "Related-party outsourcing and retrospective claims"
+        ],
+        "faq_highlights": {
+          "opening_closing_window": "9 September 2024 to 10 April 2025",
+          "specific_conditions": [
+            "Create jobs for Malaysians",
+            "At least 50% Malaysian team composition"
+          ],
+          "termination_risk": "Breach/non-delivery can trigger grant termination, clawback, and potential blacklist."
+        }
+      },
+      {
+        "name": "DCG Mini Grant",
+        "url": "https://www.mdec.my/grants/dcg/mini-project-grant",
+        "status_note": "Application Closed",
+        "purpose": "Support development, production and commercialisation of digital content products.",
+        "ceiling_amount": "RM150,000",
+        "grant_assistance": "Up to 100% of project cost or ceiling amount (whichever is lower)",
+        "allowable_project_duration": "Up to 6 months",
+        "eligible_categories": [
+          "Animation",
+          "Digital Games",
+          "Creative Technology",
+          "Digital Comic"
+        ],
+        "key_eligibility_summary": [
+          "Company/Enterprise/Sole Proprietorship/Partnership/LLP registered in Malaysia",
+          "At least 51% Malaysian ownership/equity",
+          "Company revenue not more than RM3 million (where applicable)",
+          "MD or MSC Malaysia status required for company category",
+          "Not current recipient of MDEC/FINAS/MyCreative grant",
+          "No liquidation/bankruptcy/blacklist/clawback issues"
+        ],
+        "notable_conditions": [
+          "One grant application per project at a time for common ownership",
+          "Past recipients generally reapply after 1-year cooling period",
+          "Cannot be broadcaster/TV network/OTT/media company"
+        ]
+      },
+      {
+        "name": "DCG Prime Grant",
+        "url": "https://www.mdec.my/grants/dcg/prime-grant",
+        "status_note": "Application Closed",
+        "purpose": "Support development, production and commercialisation of digital content products.",
+        "ceiling_amount": "RM500,000",
+        "grant_assistance": "Up to 100% of project cost or ceiling amount (whichever is lower)",
+        "allowable_project_duration": "Up to 9 months",
+        "eligible_categories": [
+          "Animation",
+          "Digital Games",
+          "Creative Technology",
+          "Digital Comic"
+        ],
+        "key_eligibility_summary": [
+          "Local registered company incorporated at least 1 year",
+          "At least 51% Malaysian equity",
+          "Minimum issued share capital RM20,000",
+          "Company revenue not more than RM5 million",
+          "Must be MD or MSC Malaysia status company",
+          "Not current recipient of MDEC/FINAS/MyCreative grant",
+          "No liquidation/bankruptcy/blacklist/clawback issues"
+        ],
+        "notable_conditions": [
+          "One grant application per project at a time for common shareholders",
+          "Past recipient cooling period and compliance checks apply",
+          "Cannot be broadcaster/TV network/OTT/media company"
+        ]
+      },
+      {
+        "name": "DCG Marketing and Commercialisation Grant",
+        "url": "https://www.mdec.my/grants/dcg/marketing-and-commercialisation-grant",
+        "status_note": "Application Closed",
+        "purpose": "Commercialise digital content products through marketing/promotion and market deals.",
+        "ceiling_amount": "RM300,000",
+        "grant_assistance": "Up to 100% of project cost or ceiling amount (whichever is lower)",
+        "allowable_project_duration": "Up to 9 months",
+        "required_output_examples": [
+          "Marketing and promotional execution",
+          "Letter of Intent / broadcaster/deal evidence",
+          "Feedback from at least two commercial organisations",
+          "Minimum two pitching sessions to buyers/investors",
+          "Media coverage"
+        ],
+        "key_eligibility_summary": [
+          "Local registered company incorporated at least 1 year",
+          "At least 51% Malaysian equity",
+          "Minimum issued share capital RM20,000",
+          "Must be MD or MSC Malaysia status company",
+          "Not current recipient of MDEC/FINAS/MyCreative grant",
+          "No liquidation/bankruptcy/blacklist/clawback issues"
+        ]
+      },
+      {
+        "name": "Malaysia Digital X-Port Grant (MDXG)",
+        "url": "https://www.mdec.my/grants/mdxg",
+        "status_note": "Application Closed",
+        "objective": "Support export-ready Malaysian tech companies to expand globally and commercialise high-value digital exports.",
+        "grant_amount": {
+          "local_owned_company": "Up to 50% of total project cost or RM1,000,000 (whichever is lower)",
+          "majority_foreign_owned_company": "Up to 30% of total project cost or RM1,000,000 (whichever is lower), HQ in Malaysia",
+          "project_duration": "Up to 1 year"
+        },
+        "eligibility_summary": [
+          "Local: min RM50,000 issued share capital and 51% Malaysian equity",
+          "Majority foreign-owned: min RM500,000 issued share capital and HQ in Malaysia",
+          "At least 1 year operation",
+          "MD or MSC Malaysia status company",
+          "No liquidation/bankruptcy/blacklist/clawback issues",
+          "Past/on-going grant compliance and non-overlap requirements apply"
+        ],
+        "specific_conditions": [
+          "Create Malaysian jobs",
+          "At least 50% Malaysian team members",
+          "Project must result in export commercial value"
+        ],
+        "application_documents_required_summary": [
+          "Pitch deck, audited accounts, board resolution, company profile and project proposal",
+          "Outsourcing documents (if applicable, outsourcing cap 20%)",
+          "Past/on-going grant proof letters",
+          "Additional information as requested by MDEC"
+        ],
+        "faq_highlights": {
+          "expected_outcomes": [
+            "IP creation",
+            "High-value job creation",
+            "Competitive innovative products/services",
+            "Commercial/export revenue growth"
+          ],
+          "processing_fee": "No additional processing fees"
+        }
+      },
+      {
+        "name": "Malaysia Digital Acceleration Grant - Artificial Intelligence (MDAG-AI)",
+        "url": "https://www.mdec.my/grants/mdag-ai#eligibility-criteria",
+        "status_note": "Application Closed (page notes open window until 18 July 2025)",
+        "objective": "Accelerate growth of MD companies developing and commercialising AI solutions with high national impact.",
+        "incentive_amount": "Up to 70% of total cost or RM2,000,000 (whichever is lower)",
+        "grant_duration": "Up to 1 year",
+        "scope_of_evaluation": [
+          "Company background and capability",
+          "Value proposition including local spillover and export/jobs",
+          "AI ownership/maturity/R&D and differentiation",
+          "Other factors such as academia linkage"
+        ],
+        "eligibility_summary": [
+          "Incorporated in Malaysia and min issued share capital RM50,000",
+          "At least 1 year in operation",
+          "MD/MSC status company (or active MD application)",
+          "Must have AI products/services in Foundation, Enabling, or Application layer",
+          "No liquidation/bankruptcy/blacklist/clawback issues",
+          "No on-going MDEC/other government grant (with stated exceptions/requirements)"
+        ],
+        "specific_condition": "Recipient must maintain approved MD or MSC Malaysia status throughout grant period or by final disbursement.",
+        "application_process": [
+          "Download application kit",
+          "Apply via GAIN Awards Platform",
+          "Select department/programme",
+          "Submit company details and supporting documents",
+          "Completeness/compliance check",
+          "Pitching session",
+          "Approval and result"
+        ],
+        "eligible_expenses_summary": [
+          "Business premise/data centre rental",
+          "External training",
+          "AI-related R&D capex/opex",
+          "Full-time employee salaries tied to KPI",
+          "Marketing/sales enablement",
+          "Design/manufacturing services for AI solution"
+        ],
+        "non_eligible_expenses_summary": [
+          "General outsourcing outside stated design/manufacturing item",
+          "IP filing, maintenance, general operating overheads",
+          "Travel/hospitality, unrelated marketing items",
+          "Taxes/duties, debt/legal penalties, bank/FX costs",
+          "Retrospective and undocumented costs"
+        ]
+      }
+    ]
+  }
+}
