@@ -6,11 +6,32 @@ function MI({ name, size = 24, color }: { name: string; size?: number; color?: s
   return <span className="material-icon" style={{ fontSize: size, color }}>{name}</span>;
 }
 
+type Integration = {
+  id: string;
+  name: string;
+  color: string;
+};
+
+type IntegrationCardProps = Integration & {
+  type: string;
+  icon: string;
+  connected?: boolean;
+  onToggle: () => void;
+};
+
+type TeamRowProps = {
+  name: string;
+  email: string;
+  role: string;
+  status: "Active" | "Pending";
+  isMe?: boolean;
+};
+
 export function IntegrationsTab() {
   const [connected, setConnected] = React.useState<Record<string, boolean>>({
     "sql_account": true
   });
-  const [selectedIntegration, setSelectedIntegration] = React.useState<any>(null);
+  const [selectedIntegration, setSelectedIntegration] = React.useState<Integration | null>(null);
 
   const handleConnect = (id: string, name: string, color: string) => {
     if (connected[id]) {
@@ -93,7 +114,7 @@ export function IntegrationsTab() {
   </div>;
 }
 
-function IntegrationAuthModal({ integration, onClose, onComplete }: any) {
+function IntegrationAuthModal({ integration, onClose, onComplete }: { integration: Integration; onClose: () => void; onComplete: () => void }) {
   const [step, setStep] = React.useState(0);
 
   React.useEffect(() => {
@@ -151,9 +172,9 @@ function IntegrationAuthModal({ integration, onClose, onComplete }: any) {
   )
 }
 
-function IntegrationCard({ id, name, type, icon, color, connected, onToggle }: any) {
+function IntegrationCard({ id, name, type, icon, color, connected, onToggle }: IntegrationCardProps) {
   return (
-    <div className={s.panel} style={{ borderRadius: 20, padding: 20, border: connected ? `2px solid ${color}` : "1px solid #E0E7EC", transition: "all 0.2s" }}>
+    <div data-integration-id={id} className={s.panel} style={{ borderRadius: 20, padding: 20, border: connected ? `2px solid ${color}` : "1px solid #E0E7EC", transition: "all 0.2s" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `${color}1a`, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <MI name={icon} size={24} color={color} />
@@ -208,7 +229,7 @@ export function TeamTab() {
   </div>;
 }
 
-function TeamRow({ name, email, role, status, isMe }: any) {
+function TeamRow({ name, email, role, status, isMe }: TeamRowProps) {
   return (
     <tr style={{ borderBottom: "1px solid #F2F4F6" }}>
       <td style={{ padding: "16px 24px" }}>

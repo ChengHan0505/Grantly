@@ -6,10 +6,29 @@ function MI({name,size=24,color}:{name:string;size?:number;color?:string}){
   return <span className="material-icon" style={{fontSize:size,color}}>{name}</span>;
 }
 
-export function HomeTab({onGenerateRoadmap}: {onGenerateRoadmap?: ()=>void}){
-  const [selectedGrant, setSelectedGrant] = React.useState<any>(null);
+type GrantInsight = {
+  icon: string;
+  color: string;
+  text: string;
+};
 
-  const grants = [
+type Grant = {
+  id: number;
+  source: string;
+  title: string;
+  amount: string;
+  match: number;
+  status: string;
+  accent: string;
+  desc: string;
+  link: string;
+  aiAnalysis: GrantInsight[];
+};
+
+export function HomeTab({onGenerateRoadmap}: {onGenerateRoadmap?: ()=>void}){
+  const [selectedGrant, setSelectedGrant] = React.useState<Grant | null>(null);
+
+  const grants: Grant[] = [
     {id: 1, source:"FEDERAL", title:"NSF AI Research Grant", amount:"$2.5M", match:98, status:"READY TO SUBMIT", accent:"#006780", 
      desc:"The National Science Foundation (NSF) supports fundamental research in artificial intelligence. This grant targets innovative AI architectures and their applications in critical sectors like manufacturing.",
      link:"https://new.nsf.gov/funding",
@@ -130,7 +149,7 @@ function PitchDeckWidget() {
           <div style={{position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: "#494BD6"}}>75%</div>
         </div>
         <div style={{flex: 1}}>
-          <div style={{fontSize: 13, fontWeight: 700, color: "#191C1E"}}>Drafting 'Financials'</div>
+          <div style={{fontSize: 13, fontWeight: 700, color: "#191C1E"}}>{"Drafting 'Financials'"}</div>
           <div style={{fontSize: 11, color: "#3D494D", marginTop: 4}}>Synthesizing from uploaded Excel models...</div>
         </div>
       </div>
@@ -222,7 +241,7 @@ function FeedCard({source, title, amount, match, status, accent, onViewDetails}:
   );
 }
 
-function GrantModal({grant, onClose, onGenerateRoadmap}: {grant:any; onClose:()=>void; onGenerateRoadmap?:()=>void}) {
+function GrantModal({grant, onClose, onGenerateRoadmap}: {grant: Grant; onClose:()=>void; onGenerateRoadmap?:()=>void}) {
   return (
     <div style={{position:"fixed", inset:0, zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(15, 23, 42, 0.4)", backdropFilter:"blur(4px)"}}>
       <div className={s.panel} style={{width: 800, maxWidth:"90vw", maxHeight:"85vh", display:"flex", flexDirection:"column", overflow:"hidden", background:"#fff", borderRadius:24, boxShadow:"0 24px 48px rgba(0,0,0,0.2)", padding:0}}>
@@ -288,7 +307,7 @@ function GrantModal({grant, onClose, onGenerateRoadmap}: {grant:any; onClose:()=
 
             <div style={{fontSize:12, fontWeight:800, color:"#6D797E", letterSpacing:1, marginBottom:12}}>AI INSIGHTS</div>
             <div style={{display:"flex", flexDirection:"column", gap:12}}>
-              {grant.aiAnalysis.map((insight:any, idx:number) => (
+              {grant.aiAnalysis.map((insight, idx) => (
                 <div key={idx} style={{background:"#fff", padding:12, borderRadius:8, display:"flex", gap:10, boxShadow:"0 2px 4px rgba(0,0,0,0.02)", border:"1px solid #E0E7EC"}}>
                   <div style={{flexShrink:0}}><MI name={insight.icon} size={18} color={insight.color}/></div>
                   <span style={{fontSize:13, color:"#191C1E", lineHeight:1.4}}>{insight.text}</span>
@@ -343,15 +362,15 @@ export function GrantTab({onApply}:{onApply:()=>void}){
           <div style={{height:20}}/>
           <div style={{display:"flex",gap:20}}>
             <div style={{flex:1}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}><MI name="verified" size={14} color="#904D00"/><span style={{fontWeight:900,letterSpacing:1,fontSize:12,color:"#191C1E"}}>WHY YOU'RE A STRONG FIT</span></div>
+              <div style={{display:"flex",alignItems:"center",gap:8}}><MI name="verified" size={14} color="#904D00"/><span style={{fontWeight:900,letterSpacing:1,fontSize:12,color:"#191C1E"}}>WHY YOU&apos;RE A STRONG FIT</span></div>
               <div style={{height:10}}/>
-              <div className={s.evidenceTile}><div className={s.evidenceIcon} style={{background:"rgba(0,103,128,0.12)"}}><MI name="eco" size={14} color="#006780"/></div><div><div style={{fontWeight:700,color:"#191C1E",fontSize:13}}>Aligns with 'Decarbonization'</div><div style={{height:4}}/><div style={{color:"#3D494D",lineHeight:1.4,fontSize:12}}>Your past project "Solar Grid V2" proves you have the required experience.</div></div></div>
+              <div className={s.evidenceTile}><div className={s.evidenceIcon} style={{background:"rgba(0,103,128,0.12)"}}><MI name="eco" size={14} color="#006780"/></div><div><div style={{fontWeight:700,color:"#191C1E",fontSize:13}}>{"Aligns with 'Decarbonization'"}</div><div style={{height:4}}/><div style={{color:"#3D494D",lineHeight:1.4,fontSize:12}}>{'Your past project "Solar Grid V2" proves you have the required experience.'}</div></div></div>
               <div className={s.evidenceTile}><div className={s.evidenceIcon} style={{background:"rgba(0,103,128,0.12)"}}><MI name="groups" size={14} color="#006780"/></div><div><div style={{fontWeight:700,color:"#191C1E",fontSize:13}}>Community Benefit Confirmed</div><div style={{height:4}}/><div style={{color:"#3D494D",lineHeight:1.4,fontSize:12}}>You already partner with 3 local workforce development boards.</div></div></div>
             </div>
             <div style={{flex:1}}>
-              <div className={s.gapPanel}><MI name="error" size={14} color="#BA1A1A"/><div><div style={{color:"#BA1A1A",fontWeight:900,letterSpacing:1,fontSize:12}}>WHAT'S MISSING</div><div style={{height:8}}/><div style={{color:"#93000A",lineHeight:1.4,fontSize:13}}>Export Compliance Certificate (Form 89-B). We need this before we can submit.</div></div></div>
+              <div className={s.gapPanel}><MI name="error" size={14} color="#BA1A1A"/><div><div style={{color:"#BA1A1A",fontWeight:900,letterSpacing:1,fontSize:12}}>WHAT&apos;S MISSING</div><div style={{height:8}}/><div style={{color:"#93000A",lineHeight:1.4,fontSize:13}}>Export Compliance Certificate (Form 89-B). We need this before we can submit.</div></div></div>
               <div style={{height:18}}/>
-              <div style={{textAlign:"center",color:"#3D494D",fontSize:12,lineHeight:1.4}}>Ready to start? We'll automatically draft your proposal steps.</div>
+              <div style={{textAlign:"center",color:"#3D494D",fontSize:12,lineHeight:1.4}}>Ready to start? We&apos;ll automatically draft your proposal steps.</div>
               <div style={{height:10}}/>
               <button className="btn-amber" onClick={onApply}><MI name="route" size={16} color="#fff"/>Start Application</button>
             </div>
