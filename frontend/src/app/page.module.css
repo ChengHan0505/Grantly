@@ -1,0 +1,225 @@
+.root {
+  position: relative;
+  min-height: 100vh;
+  background: #F7F9FB;
+  overflow: hidden;
+}
+
+/* ── Mesh Background ── */
+.meshBg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: #F7F9FB;
+}
+.meshBlob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+/* ── Nav Tabs in Top Bar ── */
+.navTabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.4);
+  padding: 4px 6px;
+  border-radius: 999px;
+}
+.navTab {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.navTab:hover { background: rgba(0,180,216,0.08); }
+.navTabActive {
+  background: #fff !important;
+  box-shadow: 0 4px 10px rgba(0,180,216,0.15);
+}
+
+/* ── Scroll wrapper ── */
+.scrollWrap {
+  position: relative;
+  z-index: 1;
+  padding: 14px 14px 40px;
+  min-height: 100vh;
+  overflow-y: auto;
+}
+.center {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+/* ── Top Bar ── */
+.topBar {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  padding: 0 20px;
+  border-radius: 999px;
+  gap: 8px;
+}
+.logo {
+  font-size: 18px;
+  font-weight: 800;
+  color: #191C1E;
+  letter-spacing: -0.4px;
+}
+.topBarIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #252C35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Hero ── */
+.hero {
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.heroTitle {
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -1.4px;
+  color: #191C1E;
+  white-space: pre-line;
+}
+.heroGradient {
+  background: linear-gradient(90deg, #0087A5, #494BD6, #904D00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.heroSub {
+  max-width: 620px;
+  margin: 18px auto 0;
+  line-height: 1.65;
+  color: #334155;
+}
+
+/* ── Glass Container ── */
+.glassContainer {
+  background: rgba(255,255,255,0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,0.8);
+  box-shadow: 0 10px 40px rgba(0,103,128,0.08);
+}
+
+/* ── Pipeline Stages ── */
+.stageRow {
+  display: flex;
+  align-items: center;
+}
+.stageWrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+}
+.stage {
+  width: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.stageCircle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.stageLabel {
+  font-weight: 700;
+  font-size: 13px;
+  color: #191C1E;
+}
+.stageDivider {
+  flex: 1;
+  height: 1px;
+  margin: 0 14px;
+  border-top: 1px solid rgba(0,180,216,0.13);
+}
+
+/* ── Cards layout ── */
+.rowGap22 {
+  display: flex;
+  gap: 22px;
+}
+.rowGap22 > * { flex: 1; }
+.colGap22 {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.rowGap05 {
+  display: flex;
+  gap: 0.5px;
+}
+.rowGap05 > * { flex: 1; }
+.colGap8 {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rowGap12 {
+  display: flex;
+  gap: 12px;
+}
+.rowGap12 > * { flex: 1; }
+
+/* ── Icon Badge ── */
+.iconBadge {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,255,255,0.64);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Row helpers ── */
+.rowCenter {
+  display: flex;
+  align-items: center;
+}
+.rowBetween {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Tiny lines / checklist ── */
+.tinyLine {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0,180,216,0.16);
+  margin-bottom: 10px;
+}
