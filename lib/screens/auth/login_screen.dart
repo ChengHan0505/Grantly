@@ -6,6 +6,16 @@ import '../../theme/app_theme.dart';
 import '../landing/landing_screen.dart';
 import '../onboarding/initialize_screen.dart';
 
+void _showLoginMessage(BuildContext context, String action) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$action is ready for integration.'),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: const Color(0xFF006780),
+    ),
+  );
+}
+
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
 
@@ -24,8 +34,8 @@ class LoginScreen extends StatelessWidget {
             child: Stack(
               children: [
                 Positioned(
-                  top: 20,
-                  left: 20,
+                  top: 32,
+                  left: 32,
                   child: _BackButton(
                     onTap: () => Navigator.pushNamedAndRemoveUntil(
                       context,
@@ -36,27 +46,35 @@ class LoginScreen extends StatelessWidget {
                 ),
                 Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1320),
+                    constraints: const BoxConstraints(maxWidth: 1280),
                     child: Row(
                       children: [
-                        if (isWide) const Expanded(flex: 5, child: _LeftPane()),
+                        if (isWide) const Expanded(child: _LeftPane()),
                         Expanded(
-                          flex: isWide ? 7 : 12,
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: isWide ? 64 : 20,
-                              vertical: 24,
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 460),
-                                  child: const _LoginCard(),
+                          child: Align(
+                            alignment: isWide
+                                ? Alignment.center
+                                : Alignment.center,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: isWide ? 56 : 22,
+                                vertical: 26,
+                              ),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ConstrainedBox(
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 450,
+                                      ),
+                                      child: const _LoginCard(),
+                                    ),
+                                    const SizedBox(height: 42),
+                                    const _RegisterLink(),
+                                  ],
                                 ),
-                                const SizedBox(height: 38),
-                                const _RegisterLink(),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -84,7 +102,6 @@ class _LoginBackground extends StatelessWidget {
       children: [
         if (showDesktopPane)
           Expanded(
-            flex: 5,
             child: Stack(
               fit: StackFit.expand,
               children: const [
@@ -103,7 +120,6 @@ class _LoginBackground extends StatelessWidget {
             ),
           ),
         Expanded(
-          flex: showDesktopPane ? 7 : 12,
           child: Stack(
             fit: StackFit.expand,
             children: const [
@@ -219,7 +235,7 @@ class _LeftPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(56, 80, 34, 74),
+      padding: const EdgeInsets.fromLTRB(64, 80, 34, 76),
       child: Align(
         alignment: Alignment.bottomLeft,
         child: Column(
@@ -229,24 +245,24 @@ class _LeftPane extends StatelessWidget {
             const Text(
               'The Intelligent',
               style: TextStyle(
-                fontSize: 70,
+                fontSize: 58,
                 fontWeight: FontWeight.w800,
                 color: AppTheme.ink,
-                height: 0.92,
+                height: 1.0,
                 letterSpacing: -1.6,
               ),
             ),
             const _EtherGradientText(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 28),
             const SizedBox(
-              width: 560,
+              width: 500,
               child: Text(
                 'Weave data into narrative. Dissolve the friction\n'
                 'between insight and impact.',
                 style: TextStyle(
-                  fontSize: 35,
+                  fontSize: 20,
                   color: Color(0xFF3D494D),
-                  height: 1.35,
+                  height: 1.55,
                   letterSpacing: -0.2,
                 ),
               ),
@@ -271,7 +287,7 @@ class _BackButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 18),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(999),
@@ -305,20 +321,27 @@ class _BackButton extends StatelessWidget {
   }
 }
 
-class _LoginCard extends StatelessWidget {
+class _LoginCard extends StatefulWidget {
   const _LoginCard();
+
+  @override
+  State<_LoginCard> createState() => _LoginCardState();
+}
+
+class _LoginCardState extends State<_LoginCard> {
+  bool _rememberMe = false;
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(38),
+      borderRadius: BorderRadius.circular(48),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 38, vertical: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 48),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(38),
+            borderRadius: BorderRadius.circular(48),
             border: Border.all(color: const Color(0x4DBCC9CE)),
             boxShadow: const [
               BoxShadow(
@@ -334,15 +357,15 @@ class _LoginCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Grant Copilot',
+                'Grantly',
                 style: TextStyle(
-                  fontSize: 50,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 31,
+                  fontWeight: FontWeight.w800,
                   color: Color(0xFF191C1E),
-                  letterSpacing: -1.3,
+                  letterSpacing: -0.8,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               const Text(
                 'Enter your credentials to access the workspace.',
                 style: TextStyle(
@@ -351,27 +374,28 @@ class _LoginCard extends StatelessWidget {
                   height: 1.25,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 46),
               const _GhostField(
                 label: 'EMAIL ADDRESS',
                 hint: 'jane@example.com',
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 22),
               const _GhostField(
                 label: 'PASSWORD',
                 hint: '••••••••',
                 forgotText: 'Forgot?',
                 obscure: true,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 24),
               Row(
                 children: [
                   SizedBox(
                     width: 20,
                     height: 20,
                     child: Checkbox(
-                      value: false,
-                      onChanged: (_) {},
+                      value: _rememberMe,
+                      onChanged: (value) =>
+                          setState(() => _rememberMe = value ?? false),
                       side: const BorderSide(color: Color(0x4DBCC9CE)),
                       fillColor: WidgetStateProperty.resolveWith(
                         (states) => states.contains(WidgetState.selected)
@@ -390,7 +414,7 @@ class _LoginCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 28),
               SizedBox(
                 width: double.infinity,
                 child: _ActionButton(
@@ -399,7 +423,7 @@ class _LoginCard extends StatelessWidget {
                       Navigator.pushNamed(context, InitializeScreen.routeName),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 34),
               Row(
                 children: [
                   const Expanded(child: Divider(color: Color(0x33BCC9CE))),
@@ -418,19 +442,15 @@ class _LoginCard extends StatelessWidget {
                   const Expanded(child: Divider(color: Color(0x33BCC9CE))),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 34),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () =>
                       Navigator.pushNamed(context, InitializeScreen.routeName),
-                  icon: const Icon(
-                    Icons.g_mobiledata_rounded,
-                    size: 26,
-                    color: Color(0xFF191C1E),
-                  ),
+                  icon: const _GoogleMark(),
                   label: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 13),
+                    padding: EdgeInsets.symmetric(vertical: 15),
                     child: Text(
                       'Continue with Google',
                       style: TextStyle(
@@ -473,10 +493,10 @@ class _GhostField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
-        color: const Color(0x14FFFFFF),
-        borderRadius: BorderRadius.circular(16),
+        color: Colors.white.withValues(alpha: 0.34),
+        borderRadius: BorderRadius.circular(34),
         border: Border.all(color: const Color(0x26BCC9CE)),
       ),
       child: Column(
@@ -486,9 +506,9 @@ class _GhostField extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF3D494D),
+                color: Color(0xFF27323A),
                 fontSize: 11,
-                letterSpacing: 1.1,
+                letterSpacing: 1.4,
                 fontWeight: FontWeight.w700,
               ),
             )
@@ -498,15 +518,15 @@ class _GhostField extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    color: Color(0xFF3D494D),
+                    color: Color(0xFF27323A),
                     fontSize: 11,
-                    letterSpacing: 1.1,
+                    letterSpacing: 1.4,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const Spacer(),
                 TextButton(
-                  onPressed: () {},
+                  onPressed: () => _showLoginMessage(context, 'Password reset'),
                   style: TextButton.styleFrom(
                     padding: EdgeInsets.zero,
                     minimumSize: const Size(0, 0),
@@ -531,10 +551,10 @@ class _GhostField extends StatelessWidget {
               contentPadding: const EdgeInsets.only(top: 2),
               hintStyle: const TextStyle(
                 color: Color(0x80BCC9CE),
-                fontSize: 16,
+                fontSize: 17,
               ),
             ),
-            style: const TextStyle(fontSize: 16, color: Color(0xFF191C1E)),
+            style: const TextStyle(fontSize: 17, color: Color(0xFF191C1E)),
           ),
         ],
       ),
@@ -572,6 +592,7 @@ class _ActionButton extends StatelessWidget {
             ],
           ),
           padding: const EdgeInsets.symmetric(vertical: 16),
+          height: 56,
           child: Text(
             label,
             textAlign: TextAlign.center,
@@ -623,10 +644,35 @@ class _EtherGradientText extends StatelessWidget {
       child: const Text(
         'Ether.',
         style: TextStyle(
-          fontSize: 70,
+          fontSize: 58,
           fontWeight: FontWeight.w800,
-          height: 0.95,
+          height: 1.0,
           letterSpacing: -1.4,
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFF111418),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: const Text(
+        'G',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

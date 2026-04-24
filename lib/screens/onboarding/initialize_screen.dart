@@ -5,6 +5,16 @@ import 'package:flutter/material.dart';
 import '../auth/login_screen.dart';
 import 'business_fundamentals_screen.dart';
 
+void _showInitializeMessage(BuildContext context, String action) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$action is ready for integration.'),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: const Color(0xFF0F7891),
+    ),
+  );
+}
+
 class InitializeScreen extends StatelessWidget {
   const InitializeScreen({super.key});
 
@@ -37,13 +47,13 @@ class InitializeScreen extends StatelessWidget {
                       showSideAccent ? 140 : 20,
                       24,
                     ),
-                    child: const Column(
+                    child: Column(
                       children: [
-                        _ProgressSection(),
-                        SizedBox(height: 18),
-                        _InitializeCard(),
-                        SizedBox(height: 28),
-                        _InitializeFooter(),
+                        const _ProgressSection(),
+                        const SizedBox(height: 18),
+                        const _InitializeCard(),
+                        const SizedBox(height: 28),
+                        const _InitializeFooter(),
                       ],
                     ),
                   ),
@@ -149,7 +159,7 @@ class _InitializeNavBar extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
         child: Container(
-          height: 78,
+          height: 68,
           padding: EdgeInsets.symmetric(
             horizontal: extraCompact ? 14 : (compact ? 20 : 28),
           ),
@@ -187,13 +197,16 @@ class _InitializeNavBar extends StatelessWidget {
                 onTap: () =>
                     Navigator.pushNamed(context, LoginScreen.routeName),
               ),
-              if (!compact) ...const [
-                SizedBox(width: 16),
-                _NavCircleIcon(icon: Icons.language),
-                SizedBox(width: 12),
-                _NavCircleIcon(icon: Icons.notifications),
-                SizedBox(width: 14),
-                CircleAvatar(
+              if (!compact) ...[
+                const SizedBox(width: 16),
+                const _NavCircleIcon(icon: Icons.language, label: 'Language'),
+                const SizedBox(width: 12),
+                const _NavCircleIcon(
+                  icon: Icons.notifications,
+                  label: 'Notifications',
+                ),
+                const SizedBox(width: 14),
+                const CircleAvatar(
                   radius: 19,
                   backgroundColor: Color(0xFF1F2126),
                   child: Icon(Icons.person, size: 18, color: Colors.white),
@@ -240,20 +253,25 @@ class _NavLoginButton extends StatelessWidget {
 }
 
 class _NavCircleIcon extends StatelessWidget {
-  const _NavCircleIcon({required this.icon});
+  const _NavCircleIcon({required this.icon, required this.label});
 
   final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
-        shape: BoxShape.circle,
+    return Tooltip(
+      message: label,
+      child: IconButton(
+        onPressed: () => _showInitializeMessage(context, label),
+        icon: Icon(icon, size: 20, color: const Color(0xFF64748B)),
+        style: IconButton.styleFrom(
+          backgroundColor: Colors.white.withValues(alpha: 0.16),
+          fixedSize: const Size(34, 34),
+          padding: EdgeInsets.zero,
+          shape: const CircleBorder(),
+        ),
       ),
-      child: Icon(icon, size: 20, color: const Color(0xFF64748B)),
     );
   }
 }
@@ -314,17 +332,17 @@ class _InitializeCard extends StatelessWidget {
     final compact = MediaQuery.sizeOf(context).width < 720;
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 840),
+      constraints: const BoxConstraints(maxWidth: 720),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(42),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             padding: EdgeInsets.fromLTRB(
-              compact ? 28 : 80,
-              compact ? 34 : 54,
-              compact ? 28 : 80,
-              compact ? 36 : 42,
+              compact ? 24 : 58,
+              compact ? 30 : 42,
+              compact ? 24 : 58,
+              compact ? 32 : 38,
             ),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.74),
@@ -353,45 +371,61 @@ class _InitializeCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Initialize Your Copilot',
-                      style: TextStyle(
-                        fontSize: compact ? 42 : 58,
-                        fontWeight: FontWeight.w800,
-                        height: 0.98,
-                        letterSpacing: -1.6,
-                        color: const Color(0xFF191C1E),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 470),
+                    Align(
+                      alignment: Alignment.center,
                       child: Text(
-                        "Let's set up your secure workspace to start drafting your first proposal.",
+                        'Get Started Now',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: compact ? 17 : 20,
-                          height: 1.65,
-                          color: const Color(0xFF3D494D),
+                          fontSize: compact ? 32 : 38,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                          letterSpacing: -1,
+                          color: const Color(0xFF191C1E),
                         ),
                       ),
                     ),
-                    SizedBox(height: compact ? 32 : 44),
-                    const _InitializeField(label: 'Full Name'),
                     const SizedBox(height: 16),
-                    const _InitializeField(label: 'Work Email'),
+                    Align(
+                      alignment: Alignment.center,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: Text(
+                          "It's easy to create your Grantly workspace. Tell us who you are, secure your account, and we'll prepare your grant roadmap workflow.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: compact ? 15 : 16,
+                            height: 1.55,
+                            color: const Color(0xFF3D494D),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: compact ? 24 : 30),
+                    const _InitializeField(label: 'Full Name *'),
+                    const SizedBox(height: 16),
+                    const _InitializeField(label: 'Email Address *'),
                     const SizedBox(height: 16),
                     const _InitializeField(
-                      label: 'Create Password',
+                      label: 'Password *',
                       showVisibility: true,
                     ),
-                    SizedBox(height: compact ? 34 : 44),
+                    const SizedBox(height: 16),
+                    const _InitializeField(
+                      label: 'Confirm Password *',
+                      showVisibility: true,
+                    ),
+                    const SizedBox(height: 22),
+                    const _CertificationRow(),
+                    SizedBox(height: compact ? 28 : 34),
                     _ContinueButton(
+                      label: 'Create New Account',
                       onTap: () => Navigator.pushNamed(
                         context,
                         BusinessFundamentalsScreen.routeName,
                       ),
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 26),
                     Center(
                       child: Wrap(
                         alignment: WrapAlignment.center,
@@ -452,6 +486,51 @@ class _SoftOrb extends StatelessWidget {
   }
 }
 
+class _CertificationRow extends StatefulWidget {
+  const _CertificationRow();
+
+  @override
+  State<_CertificationRow> createState() => _CertificationRowState();
+}
+
+class _CertificationRowState extends State<_CertificationRow> {
+  bool _checked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => setState(() => _checked = !_checked),
+      borderRadius: BorderRadius.circular(18),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Checkbox(
+            value: _checked,
+            onChanged: (value) => setState(() => _checked = value ?? false),
+            activeColor: const Color(0xFF0F7891),
+            side: const BorderSide(color: Color(0xFF6D797E)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              "I certify that I agree to Grantly's Privacy Policy, Terms and Conditions, and Refund Policy; and I understand it is my responsibility to do due diligence on any grant or investor I meet via this platform.",
+              style: TextStyle(
+                color: Color(0xFF191C1E),
+                fontSize: 15,
+                height: 1.45,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InitializeField extends StatelessWidget {
   const _InitializeField({required this.label, this.showVisibility = false});
 
@@ -461,8 +540,8 @@ class _InitializeField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 84,
-      padding: const EdgeInsets.symmetric(horizontal: 30),
+      height: 68,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       decoration: BoxDecoration(
         color: const Color(0xFFF0F2F5),
         borderRadius: BorderRadius.circular(28),
@@ -476,19 +555,19 @@ class _InitializeField extends StatelessWidget {
                 hintText: label,
                 hintStyle: const TextStyle(
                   color: Color(0xFF24323B),
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.w500,
                 ),
                 border: InputBorder.none,
               ),
-              style: const TextStyle(color: Color(0xFF191C1E), fontSize: 18),
+              style: const TextStyle(color: Color(0xFF191C1E), fontSize: 16),
             ),
           ),
           if (showVisibility)
             const Icon(
               Icons.visibility_outlined,
               color: Color(0xFF93A4BA),
-              size: 28,
+              size: 22,
             ),
         ],
       ),
@@ -497,9 +576,10 @@ class _InitializeField extends StatelessWidget {
 }
 
 class _ContinueButton extends StatelessWidget {
-  const _ContinueButton({required this.onTap});
+  const _ContinueButton({required this.onTap, required this.label});
 
   final VoidCallback onTap;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -535,7 +615,7 @@ class _ContinueButton extends StatelessWidget {
               spacing: 12,
               children: [
                 Text(
-                  'Continue to Company Setup',
+                  label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.white,
@@ -561,7 +641,7 @@ class _InitializeFooter extends StatelessWidget {
     final compact = MediaQuery.sizeOf(context).width < 760;
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 840),
+      constraints: const BoxConstraints(maxWidth: 720),
       child: compact
           ? const Column(
               children: [
