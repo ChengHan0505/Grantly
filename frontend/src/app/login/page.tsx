@@ -2,6 +2,9 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleProvider } from "@/lib/firebase";
 import styles from "./page.module.css";
 
 function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
@@ -82,6 +85,21 @@ function LeftPane() {
 
 function LoginCard() {
   const [rememberMe, setRememberMe] = React.useState(false);
+  const [googleLoading, setGoogleLoading] = React.useState(false);
+  const [googleError, setGoogleError] = React.useState("");
+  const router = useRouter();
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setGoogleError("");
+    try {
+      await signInWithPopup(auth, googleProvider);
+      router.push("/dashboard");
+    } catch (err: any) {
+      setGoogleError(err.message || "Google sign-in failed. Please try again.");
+      setGoogleLoading(false);
+    }
+  };
 
   return (
     <div className={`${styles.loginCard} glass-strong`}>
@@ -100,7 +118,7 @@ function LoginCard() {
       </label>
       <div style={{ height: 20 }} />
 
-      <Link href="/initialize" className="btn-gradient" style={{ height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Link href="/dashboard" className="btn-gradient" style={{ height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
         Access Workspace
       </Link>
       <div style={{ height: 24 }} />
@@ -112,10 +130,33 @@ function LoginCard() {
       </div>
       <div style={{ height: 24 }} />
 
-      <Link href="/initialize" className={styles.googleBtn}>
-        <div className={styles.googleMark}>G</div>
-        <span>Continue with Google</span>
-      </Link>
+      {googleError && (
+        <div style={{ background: "#fff0f0", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#BA1A1A" }}>
+          {googleError}
+        </div>
+      )}
+
+      <button
+        onClick={handleGoogleSignIn}
+        disabled={googleLoading}
+        className={styles.googleBtn}
+        style={{ width: "100%", border: "none", cursor: googleLoading ? "wait" : "pointer", opacity: googleLoading ? 0.7 : 1 }}
+      >
+        {googleLoading ? (
+          <span style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ animation: "spin 0.8s linear infinite" }}>
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+            </svg>
+            Signing in...
+          </span>
+        ) : (
+          <>
+            <div className={styles.googleMark}>G</div>
+            <span>Continue with Google</span>
+          </>
+        )}
+      </button>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
