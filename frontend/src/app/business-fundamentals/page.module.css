@@ -1,0 +1,235 @@
+.root {
+  position: relative;
+  min-height: 100vh;
+  background: #F7F9FB;
+}
+.bgOrbs {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.main {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 10px;
+}
+.centerWrap {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* ── Nav ── */
+.navBar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 999px;
+  gap: 10px;
+}
+.navLogo {
+  font-weight: 800;
+  font-size: 17px;
+  color: #191C1E;
+  letter-spacing: -0.5px;
+}
+.loginBtn {
+  padding: 9px 20px;
+  border-radius: 999px;
+  background: #0F7891;
+  color: white;
+  font-weight: 700;
+  font-size: 13px;
+}
+.navCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.navAvatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #1F2126;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Progress ── */
+.progressWrap {
+  max-width: 800px;
+  margin: 0 auto;
+}
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stepLabel {
+  font-size: 14px;
+  letter-spacing: 1.8px;
+  font-weight: 800;
+  color: #006780;
+}
+.stepPercent {
+  font-size: 14px;
+  color: #3D494D;
+}
+.progressTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: #D7E3E8;
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  background: #0F7891;
+  border-radius: 999px;
+}
+
+/* ── Card ── */
+.card {
+  border-radius: 24px;
+}
+.stepBadge {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(69,177,212,0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.title {
+  font-weight: 800;
+  letter-spacing: -1.6px;
+  color: #191C1E;
+  text-align: center;
+}
+.subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #3D494D;
+  text-align: center;
+  margin-top: 8px;
+}
+.promptLabel {
+  font-size: 14px;
+  font-weight: 700;
+  color: #191C1E;
+  display: block;
+}
+
+/* ── Stage cards ── */
+.stageGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.stageCard {
+  width: 84px;
+  height: 60px;
+  border-radius: 14px;
+  background: #F0F2F5;
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  font-size: 12px;
+  font-weight: 600;
+  color: #191C1E;
+}
+.stageCard:hover { background: #E8EDF2; }
+.stageActive {
+  background: rgba(69,177,212,0.12) !important;
+  border-color: #45B1D4 !important;
+}
+
+/* ── Traction chips ── */
+.chipGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #F0F2F5;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: #3D494D;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.chip:hover { background: #E8EDF2; }
+.chipActive {
+  background: rgba(254,147,44,0.11) !important;
+  border-color: rgba(254,147,44,0.4) !important;
+  color: #904D00 !important;
+}
+
+/* ── Nav buttons ── */
+.navRowBtns {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.navColBtns {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.backBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #191C1E;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+.nextBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 26px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0F7891, #45B1D4);
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(0,103,128,0.2);
+  transition: transform 0.2s;
+}
+.nextBtn:hover { transform: translateY(-1px); }

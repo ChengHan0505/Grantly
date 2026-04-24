@@ -1,0 +1,245 @@
+.root {
+  position: relative;
+  min-height: 100vh;
+  background: #F7F9FB;
+}
+
+/* ── Background ── */
+.bgWrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  z-index: 0;
+}
+.leftBg {
+  flex: 1;
+  position: relative;
+  background: #ECEEF0;
+  overflow: hidden;
+}
+.rightBg {
+  flex: 1;
+  position: relative;
+  background: #F7F9FB;
+  overflow: hidden;
+}
+.meshLayer, .meshLayerLight {
+  position: absolute;
+  inset: 0;
+}
+.glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.leftFade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent, rgba(247,249,251,0.8));
+}
+
+/* ── Back button ── */
+.backBtn {
+  position: fixed;
+  top: 32px;
+  left: 32px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 28px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(188,201,206,0.15);
+  box-shadow: 0 16px 34px rgba(25,28,30,0.06);
+  color: #006780;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.backBtn:hover { transform: translateY(-1px); }
+
+/* ── Content ── */
+.content {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.inner {
+  display: flex;
+  max-width: 1280px;
+  width: 100%;
+}
+
+/* ── Left Pane ── */
+.leftPane {
+  flex: 1;
+  padding: 80px 34px 140px 64px;
+  display: flex;
+  align-items: flex-end;
+}
+.leftContent {
+  display: flex;
+  flex-direction: column;
+}
+.leftTitle {
+  font-size: 58px;
+  font-weight: 800;
+  color: #0E1320;
+  line-height: 1;
+  letter-spacing: -1.6px;
+}
+.etherGradient {
+  font-size: 58px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -1.4px;
+  background: linear-gradient(90deg, #006780, #494BD6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.leftSub {
+  font-size: 20px;
+  color: #3D494D;
+  line-height: 1.55;
+  letter-spacing: -0.2px;
+  max-width: 500px;
+  white-space: pre-line;
+}
+
+/* ── Form Side ── */
+.formSide {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 26px 22px;
+}
+.formScroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 450px;
+  width: 100%;
+}
+
+/* ── Login Card ── */
+.loginCard {
+  padding: 48px;
+  border-radius: 48px;
+  width: 100%;
+}
+.cardTitle {
+  font-size: 31px;
+  font-weight: 800;
+  color: #191C1E;
+  letter-spacing: -0.8px;
+}
+.cardSub {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #3D494D;
+  line-height: 1.25;
+}
+
+/* ── Field header ── */
+.fieldHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.forgotBtn {
+  font-size: 12px;
+  color: #006780;
+  cursor: pointer;
+}
+
+/* ── Remember me ── */
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #3D494D;
+}
+.checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: #006780;
+  border-radius: 5px;
+}
+
+/* ── Divider ── */
+.dividerRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dividerLine {
+  flex: 1;
+  height: 1px;
+  background: rgba(188,201,206,0.2);
+}
+.dividerText {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: #9e9e9e;
+}
+
+/* ── Google button ── */
+.googleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 15px;
+  border-radius: 999px;
+  background: #F2F4F6;
+  border: 1px solid rgba(188,201,206,0.1);
+  font-size: 14px;
+  font-weight: 600;
+  color: #191C1E;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.googleBtn:hover { background: #E8EAEC; }
+.googleMark {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: #111418;
+  color: white;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Register link ── */
+.registerLink {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #904D00;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.registerLink:hover { opacity: 0.8; }
+
+@media (max-width: 1024px) {
+  .inner { justify-content: center; }
+  .formSide { padding: 26px 22px; }
+  .loginCard { padding: 32px 24px; }
+}
