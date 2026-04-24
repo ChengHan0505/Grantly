@@ -223,7 +223,7 @@ function AiAnalysisModal({onClose}: {onClose:()=>void}) {
                   </div>
                   <span style={{fontSize:11, fontWeight:700, color:"#6D797E", background:"#F2F4F6", padding:"2px 8px", borderRadius:999}}>+5 Pts</span>
                 </div>
-                <div style={{fontSize:13, color:"#3D494D", lineHeight:1.4}}>Add metrics on local job creation to your 'Problem Solved' narrative to align with recent DOE FOA trends.</div>
+                <div style={{fontSize:13, color:"#3D494D", lineHeight:1.4}}>{"Add metrics on local job creation to your 'Problem Solved' narrative to align with recent DOE FOA trends."}</div>
               </div>
 
             </div>

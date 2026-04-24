@@ -148,7 +148,7 @@ function SmeFeaturesSection({ compact }: { compact: boolean }) {
         </div>
         <div style={{ height: 16 }} />
         <p style={{ color: "#334155", lineHeight: 1.6, fontSize: 15 }}>
-          Stop wasting time on grants you won't win. Our AI cross-references your <strong style={{ color: "#0087A5" }}>business fundamentals</strong> with thousands of active grants to find your perfect fit.
+          Stop wasting time on grants you won&apos;t win. Our AI cross-references your <strong style={{ color: "#0087A5" }}>business fundamentals</strong> with thousands of active grants to find your perfect fit.
         </p>
         <div style={{ height: 32 }} />
         <div style={{ textAlign: "center", background: "#fff", padding: "24px", borderRadius: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.05)", border: "1px solid rgba(0,180,216,0.2)" }}>
@@ -171,7 +171,7 @@ function SmeFeaturesSection({ compact }: { compact: boolean }) {
         <div style={{ background: "#fff", padding: "24px", borderRadius: 20, boxShadow: "0 10px 30px rgba(0,0,0,0.05)", border: "1px solid rgba(0,180,216,0.2)" }}>
           <div className={styles.rowCenter} style={{ gap: 8 }}>
             <MI name="sync" size={16} color="#0087A5" />
-            <span style={{ fontWeight: 800, fontSize: 13, color: "#0087A5" }}>Drafting "Financials"</span>
+            <span style={{ fontWeight: 800, fontSize: 13, color: "#0087A5" }}>{'Drafting "Financials"'}</span>
           </div>
           <div style={{ height: 20 }} />
           <div className={styles.tinyLine} style={{ width: "100%", background: "#E2E8F0", height: 6 }} />
@@ -259,7 +259,7 @@ function TestimonialCard({quote, name, role, avatarColor}:{quote:string;name:str
       <MI name="format_quote" size={32} color={avatarColor} />
       <div style={{ height: 12 }} />
       <p style={{ fontSize: 15, lineHeight: 1.6, color: "#334155", fontStyle: "italic" }}>
-        "{quote}"
+        {`"${quote}"`}
       </p>
       <div style={{ height: 24 }} />
       <div className={styles.rowCenter} style={{ gap: 12 }}>

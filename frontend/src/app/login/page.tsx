@@ -95,8 +95,9 @@ function LoginCard() {
     try {
       await signInWithPopup(auth, googleProvider);
       router.push("/dashboard");
-    } catch (err: any) {
-      setGoogleError(err.message || "Google sign-in failed. Please try again.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Google sign-in failed. Please try again.";
+      setGoogleError(message);
       setGoogleLoading(false);
     }
   };
