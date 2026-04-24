@@ -198,7 +198,7 @@ class _TopBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                'Grant Copilot',
+                'Grantly',
                 style: TextStyle(
                   fontSize: compact ? 17 : 18,
                   fontWeight: FontWeight.w800,

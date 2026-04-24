@@ -18,7 +18,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(LandingScreen), findsOneWidget);
-    expect(find.text('Grant Copilot'), findsOneWidget);
+    expect(find.text('Grantly'), findsOneWidget);
     expect(
       find.text('Ready to transform your grant workflow?'),
       findsOneWidget,
