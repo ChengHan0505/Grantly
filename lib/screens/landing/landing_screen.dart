@@ -11,6 +11,9 @@ class LandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final showSideDock = screenWidth >= 1100;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF7F9FB),
       body: Stack(
@@ -19,11 +22,12 @@ class LandingScreen extends StatelessWidget {
           SafeArea(
             child: Stack(
               children: [
-                Positioned(
-                  left: 16,
-                  top: 170,
-                  child: _SideDock(onHomeTap: () {}),
-                ),
+                if (showSideDock)
+                  Positioned(
+                    left: 16,
+                    top: 170,
+                    child: _SideDock(onHomeTap: () {}),
+                  ),
                 SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(22, 14, 22, 36),
                   child: Center(
@@ -126,6 +130,8 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 720;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
       child: BackdropFilter(
@@ -133,7 +139,7 @@ class _TopBar extends StatelessWidget {
         child: Container(
           height: 62,
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 14 : 20),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.42),
             borderRadius: BorderRadius.circular(999),
@@ -154,21 +160,26 @@ class _TopBar extends StatelessWidget {
                 color: Color(0xFF00B4D8),
               ),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Grant Copilot',
-                style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  fontSize: compact ? 18 : 23,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const Spacer(),
               _PillButton(label: 'Login', onTap: onLogin),
-              const SizedBox(width: 8),
-              const _TopBarIcon(icon: Icons.language),
-              const SizedBox(width: 6),
-              const _TopBarIcon(icon: Icons.notifications),
-              const SizedBox(width: 10),
-              const CircleAvatar(
-                radius: 15,
-                backgroundColor: Color(0xFF252C35),
-              ),
+              if (!compact) ...[
+                const SizedBox(width: 8),
+                const _TopBarIcon(icon: Icons.language),
+                const SizedBox(width: 6),
+                const _TopBarIcon(icon: Icons.notifications),
+                const SizedBox(width: 10),
+                const CircleAvatar(
+                  radius: 15,
+                  backgroundColor: Color(0xFF252C35),
+                ),
+              ],
             ],
           ),
         ),
@@ -279,50 +290,60 @@ class _HeroSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        RichText(
-          textAlign: TextAlign.center,
-          text: TextSpan(
-            style: const TextStyle(
-              color: Color(0xFF191C1E),
-              fontSize: 66,
-              fontWeight: FontWeight.w700,
-              height: 1.06,
-            ),
-            children: [
-              const TextSpan(text: 'The Future of Grants is\n'),
-              TextSpan(
-                text: 'Generative',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 700;
+        final headlineSize = compact ? 42.0 : 66.0;
+
+        return Column(
+          children: [
+            RichText(
+              textAlign: TextAlign.center,
+              text: TextSpan(
                 style: TextStyle(
-                  foreground: Paint()
-                    ..shader = LinearGradient(
-                      colors: [
-                        Color(0xFF00B4D8),
-                        Color(0xFF494BD6),
-                        Color(0xFF904D00),
-                      ],
-                    ).createShader(Rect.fromLTWH(0, 0, 320, 70)),
+                  color: const Color(0xFF191C1E),
+                  fontSize: headlineSize,
+                  fontWeight: FontWeight.w700,
+                  height: 1.06,
+                ),
+                children: [
+                  const TextSpan(text: 'The Future of Grants is\n'),
+                  TextSpan(
+                    text: 'Generative',
+                    style: TextStyle(
+                      foreground: Paint()
+                        ..shader =
+                            const LinearGradient(
+                              colors: [
+                                Color(0xFF00B4D8),
+                                Color(0xFF494BD6),
+                                Color(0xFF904D00),
+                              ],
+                            ).createShader(
+                              Rect.fromLTWH(0, 0, compact ? 220 : 320, 70),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Text(
+                'An AI-powered workflow copilot that automates the entire grant readiness process. '
+                'Fluid, intelligent, and designed for technical storytelling.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: compact ? 18 : 21,
+                  height: 1.5,
+                  color: const Color(0xFF3D494D),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-        const SizedBox(
-          width: 760,
-          child: Text(
-            'An AI-powered workflow copilot that automates the entire grant readiness process. '
-            'Fluid, intelligent, and designed for technical storytelling.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 21,
-              height: 1.5,
-              color: Color(0xFF3D494D),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
@@ -332,35 +353,72 @@ class _PipelineStagePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _GlassContainer(
-      radius: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 28),
-      child: Row(
-        children: const [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 760;
+        final stages = const [
           _Stage(icon: Icons.upload_file, label: 'Ingest'),
-          _StageDivider(),
           _Stage(
             icon: Icons.analytics,
             label: 'Evaluate',
             bg: Color(0x3300B4D8),
             fg: Color(0xFF00B4D8),
           ),
-          _StageDivider(),
           _Stage(
             icon: Icons.hub,
             label: 'Orchestrate',
             bg: Color(0x33999CFF),
             fg: Color(0xFF494BD6),
           ),
-          _StageDivider(),
           _Stage(
             icon: Icons.edit_document,
             label: 'Draft',
             bg: Color(0x33FE932C),
             fg: Color(0xFF904D00),
           ),
-        ],
-      ),
+        ];
+
+        return _GlassContainer(
+          radius: 48,
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 20 : 34,
+            vertical: compact ? 24 : 28,
+          ),
+          child: compact
+              ? Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 18,
+                  runSpacing: 18,
+                  children: stages,
+                )
+              : const Row(
+                  children: [
+                    _Stage(icon: Icons.upload_file, label: 'Ingest'),
+                    _StageDivider(),
+                    _Stage(
+                      icon: Icons.analytics,
+                      label: 'Evaluate',
+                      bg: Color(0x3300B4D8),
+                      fg: Color(0xFF00B4D8),
+                    ),
+                    _StageDivider(),
+                    _Stage(
+                      icon: Icons.hub,
+                      label: 'Orchestrate',
+                      bg: Color(0x33999CFF),
+                      fg: Color(0xFF494BD6),
+                    ),
+                    _StageDivider(),
+                    _Stage(
+                      icon: Icons.edit_document,
+                      label: 'Draft',
+                      bg: Color(0x33FE932C),
+                      fg: Color(0xFF904D00),
+                    ),
+                  ],
+                ),
+        );
+      },
     );
   }
 }
@@ -421,12 +479,26 @@ class _PipelineRevealSection extends StatelessWidget {
   const _PipelineRevealSection();
   @override
   Widget build(BuildContext context) {
-    return const Row(
-      children: [
-        Expanded(child: _IngestCard()),
-        SizedBox(width: 24),
-        Expanded(child: _EvaluateCard()),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 960;
+
+        return compact
+            ? const Column(
+                children: [
+                  _IngestCard(),
+                  SizedBox(height: 24),
+                  _EvaluateCard(),
+                ],
+              )
+            : const Row(
+                children: [
+                  Expanded(child: _IngestCard()),
+                  SizedBox(width: 24),
+                  Expanded(child: _EvaluateCard()),
+                ],
+              );
+      },
     );
   }
 }
@@ -442,16 +514,18 @@ class _IngestCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              _IconBadge(
+              const _IconBadge(
                 icon: Icons.document_scanner,
                 color: Color(0xFF191C1E),
               ),
-              SizedBox(width: 12),
-              Text(
-                'Ingest & Parse',
-                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Ingest & Parse',
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+                ),
               ),
             ],
           ),
@@ -566,16 +640,18 @@ class _EvaluateCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              _IconBadge(icon: Icons.radar, color: Color(0xFF00B4D8)),
-              SizedBox(width: 12),
-              Text(
-                'Evaluate Logic',
-                style: TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF00B4D8),
+              const _IconBadge(icon: Icons.radar, color: Color(0xFF00B4D8)),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Evaluate Logic',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF00B4D8),
+                  ),
                 ),
               ),
             ],
@@ -680,140 +756,171 @@ class _IntentSwitchSection extends StatelessWidget {
   const _IntentSwitchSection();
   @override
   Widget build(BuildContext context) {
-    return _GlassContainer(
-      radius: 48,
-      padding: const EdgeInsets.all(6),
-      child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 960;
+
+        return _GlassContainer(
+          radius: 48,
+          padding: const EdgeInsets.all(6),
+          child: compact
+              ? const Column(
+                  children: [
+                    _LogicArchitecturePanel(),
+                    SizedBox(height: 12),
+                    _LogicPipelinePanel(),
+                  ],
+                )
+              : const Row(
+                  children: [
+                    Expanded(child: _LogicArchitecturePanel()),
+                    SizedBox(width: 1),
+                    Expanded(child: _LogicPipelinePanel()),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _LogicArchitecturePanel extends StatelessWidget {
+  const _LogicArchitecturePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(34),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(38),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(34),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.62),
-                borderRadius: BorderRadius.circular(38),
+          Row(
+            children: const [
+              Icon(Icons.table_chart, color: Color(0xFF00B4D8)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Orchestrated Logic Architecture',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 24,
+                    color: Color(0xFF00B4D8),
+                  ),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.table_chart, color: Color(0xFF00B4D8)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Orchestrated Logic Architecture',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 24,
-                          color: Color(0xFF00B4D8),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  RichText(
-                    text: const TextSpan(
-                      style: TextStyle(
-                        color: Color(0xFF3D494D),
-                        height: 1.45,
-                        fontSize: 16,
-                      ),
-                      children: [
-                        TextSpan(text: 'Navigate your data landscape by '),
-                        TextSpan(
-                          text:
-                              'mapping evidence traces to specific narrative nodes',
-                          style: TextStyle(
-                            color: Color(0xFF00B4D8),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        TextSpan(text: ' within your project blueprint.'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: const [
-                      Expanded(child: _MiniBox(active: false)),
-                      SizedBox(width: 12),
-                      Expanded(child: _MiniBox(active: true)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  const _MiniBox(active: false, wide: true),
-                ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          RichText(
+            text: const TextSpan(
+              style: TextStyle(
+                color: Color(0xFF3D494D),
+                height: 1.45,
+                fontSize: 16,
               ),
+              children: [
+                TextSpan(text: 'Navigate your data landscape by '),
+                TextSpan(
+                  text: 'mapping evidence traces to specific narrative nodes',
+                  style: TextStyle(
+                    color: Color(0xFF00B4D8),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                TextSpan(text: ' within your project blueprint.'),
+              ],
             ),
           ),
-          const SizedBox(width: 1),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(34),
-              decoration: BoxDecoration(
-                color: const Color(0x14904D00),
-                borderRadius: BorderRadius.circular(38),
+          const SizedBox(height: 18),
+          Row(
+            children: const [
+              Expanded(child: _MiniBox(active: false)),
+              SizedBox(width: 12),
+              Expanded(child: _MiniBox(active: true)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const _MiniBox(active: false, wide: true),
+        ],
+      ),
+    );
+  }
+}
+
+class _LogicPipelinePanel extends StatelessWidget {
+  const _LogicPipelinePanel();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(34),
+      decoration: BoxDecoration(
+        color: const Color(0x14904D00),
+        borderRadius: BorderRadius.circular(38),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.draw, color: Color(0xFF904D00)),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Universal Logic Pipeline',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 24,
+                    color: Color(0xFF904D00),
+                  ),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.draw, color: Color(0xFF904D00)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Universal Logic Pipeline',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 24,
-                          color: Color(0xFF904D00),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  RichText(
-                    text: const TextSpan(
-                      style: TextStyle(
-                        color: Color(0xFF3D494D),
-                        height: 1.45,
-                        fontSize: 16,
-                      ),
-                      children: [
-                        TextSpan(text: 'Seamlessly '),
-                        TextSpan(
-                          text:
-                              'compiling technical blueprints into a final, deployable grant architecture',
-                          style: TextStyle(
-                            color: Color(0xFF904D00),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        TextSpan(text: ' ready for submission.'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    height: 126,
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0x1A904D00)),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _TinyLine(width: 120),
-                        SizedBox(height: 14),
-                        _TinyLine(width: 250),
-                        SizedBox(height: 8),
-                        _TinyLine(width: 190),
-                      ],
-                    ),
-                  ),
-                ],
+            ],
+          ),
+          const SizedBox(height: 10),
+          RichText(
+            text: const TextSpan(
+              style: TextStyle(
+                color: Color(0xFF3D494D),
+                height: 1.45,
+                fontSize: 16,
               ),
+              children: [
+                TextSpan(text: 'Seamlessly '),
+                TextSpan(
+                  text:
+                      'compiling technical blueprints into a final, deployable grant architecture',
+                  style: TextStyle(
+                    color: Color(0xFF904D00),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                TextSpan(text: ' ready for submission.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            height: 126,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.62),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: const Color(0x1A904D00)),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _TinyLine(width: 120),
+                SizedBox(height: 14),
+                _TinyLine(width: 250),
+                SizedBox(height: 8),
+                _TinyLine(width: 190),
+              ],
             ),
           ),
         ],
