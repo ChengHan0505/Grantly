@@ -46,9 +46,13 @@ Logical constraints (apply strictly):
     document requirement is UNMET.
 
 Scoring:
-  readiness_score is an integer from 0 to 100, computed as:
-    round(100 * (count of MET traces) / (total number of traces))
-  UNKNOWN traces count as NOT met for the score.
+  Calculate the readiness_score (0 to 100) using a weighted system:
+    - Financial & Rule Criteria (50 points total): Give proportional points
+      for Sector, Funding Cap, Outsourcing Limit, and End-User Partner being MET.
+    - Document Criteria (50 points total): Give proportional points based on
+      the percentage of mandatory_documents that are MET.
+    - Add both components, then round to the nearest integer.
+  UNKNOWN traces count as NOT met for whichever component they belong to.
 
 Output: return strict JSON matching this schema exactly. No prose, no
 Markdown fences.

@@ -22,6 +22,7 @@ class SMEProfile(BaseModel):
     requested_funding_rm: int
     outsourced_cost_rm: int
     has_end_user_partner: bool
+    company_logo_url: str | None = None
     documents_provided: List[str]
     uploaded_pitch_deck_text: str | None = None
 
@@ -67,7 +68,7 @@ class CoachOutput(BaseModel):
     next_steps: List[ActionStep]
 
 
-class SlideContent(BaseModel):
+class DeckSlide(BaseModel):
     slide_number: int
     title: str
     bullet_points: List[str]
@@ -79,8 +80,20 @@ class DeckCritique(BaseModel):
     action_items_to_improve: List[str]
 
 
-class DrafterOutput(BaseModel):
+class DeckOutput(BaseModel):
+    generated_deck: List[DeckSlide]
+
+
+class ProposalOutput(BaseModel):
     business_proposal_markdown: str
+
+
+class ScriptOutput(BaseModel):
     presentation_script_markdown: str
-    generated_deck: List[SlideContent] | None = None
+
+
+class DrafterOutput(BaseModel):
+    proposal: ProposalOutput | None
+    deck: DeckOutput | None
+    script: ScriptOutput | None
     deck_critique: DeckCritique | None = None

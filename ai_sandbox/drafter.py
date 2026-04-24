@@ -1,12 +1,11 @@
-"""Drafter agent (Track B): generate the final submission package.
+"""Drafter agent (Track B): parallelized divide-and-conquer drafting.
 
-Given a 100%-ready SMEProfile and a GrantRequirement, this produces:
-  - a persuasive business proposal (Markdown),
-  - a pitch-day presentation script (Markdown), and
-  - EITHER a freshly generated 6-8 slide deck, OR a critique of the
-    founder's uploaded deck text -- not both.
+This module splits drafting into focused calls:
+  1) proposal writer
+  2) deck generator
+  3) presentation script writer
 
-The branch is chosen by inspecting ``sme_data.uploaded_pitch_deck_text``.
+If the SME uploaded an existing deck, we switch to critique mode instead.
 """
 
 from __future__ import annotations
@@ -15,69 +14,143 @@ import asyncio
 import json
 
 from glm_client import GLMClient
-from schemas import DrafterOutput, GrantRequirement, SMEProfile
+from schemas import (
+    DeckCritique,
+    DeckOutput,
+    DrafterOutput,
+    GrantRequirement,
+    ProposalOutput,
+    SMEProfile,
+    ScriptOutput,
+)
 
 
-DRAFTER_SYSTEM_PROMPT_TEMPLATE = """You are an elite startup fundraiser and grant writer in Malaysia.
+def _make_user_prompt(sme: SMEProfile, grant: GrantRequirement) -> str:
+    return (
+        f"SME Profile:\n{sme.model_dump_json(indent=2)}\n\n"
+        f"Grant Requirements:\n{grant.model_dump_json(indent=2)}"
+    )
 
-The user has a 100% readiness score. You must generate a concise, 1-paragraph
-Executive Summary Business Proposal and a brief, high-level Presentation
-Script tailored to the grant's outcomes, tone, and evaluation criteria
-(reference the grant_name, promoted_sectors, and funding tiers in the copy).
 
-Style:
-  - Write in clear, confident, investor-grade English.
-  - Lean on concrete numbers from the SME Profile (funding ask,
-    outsourcing ratio, employee count, months in operation).
-  - No fluff, no filler. Every sentence should either sell the
-    opportunity or de-risk it.
-  - Keep it short. Prioritise signal over length.
+async def draft_proposal(sme: SMEProfile, grant: GrantRequirement) -> ProposalOutput:
+    """Generate a focused business proposal."""
+    schema = json.dumps(ProposalOutput.model_json_schema(), indent=2)
+    system_prompt = f"""You are an elite startup fundraiser and grant writer in Malaysia.
 
-BRANCHING LOGIC (read carefully):
-  - If SME Profile's "uploaded_pitch_deck_text" is a non-empty string,
-    act as an investor reviewing their deck. Populate "deck_critique"
-    with strengths, weaknesses, and action_items_to_improve grounded
-    in the text they provided. Leave "generated_deck" as null.
-  - If "uploaded_pitch_deck_text" is null, missing, or an empty
-    string, act as a creator. Populate "generated_deck" with a
-    short, 3-slide presentation tailored to this grant (typical flow:
-    Problem + Solution, Traction + Team, Ask + Use of Funds).
-    Leave "deck_critique" as null.
+Write a maximum of 2 short paragraphs for the business proposal.
+Keep it concrete, numerical, and persuasive for the target grant.
 
-You MUST populate EXACTLY ONE of {{generated_deck, deck_critique}} and leave
-the other as null. Never populate both. Never leave both null.
+Must include:
+- Executive summary
+- Problem and market opportunity
+- Product/service differentiation
+- Traction and validation
+- Team and governance
+- Detailed use-of-funds plan aligned to grant outcomes
+- Risk management and mitigation
+- KPI and implementation timeline
+- Clear closing argument for award decision
 
-Output: return strict JSON matching this schema exactly. No Markdown
-fences around the JSON, no prose outside it. Markdown inside the string
-fields (business_proposal_markdown, presentation_script_markdown) is
-expected and encouraged.
-
+Output strict JSON only matching this schema:
 {schema}
 """
+    client = GLMClient()
+    result = await client.generate_json(
+        system_prompt=system_prompt,
+        user_prompt=_make_user_prompt(sme, grant),
+        temperature=0.5,
+    )
+    return ProposalOutput(**result)
+
+
+async def draft_deck(sme: SMEProfile, grant: GrantRequirement) -> DeckOutput:
+    """Generate a concise 5-slide grant pitch deck."""
+    schema = json.dumps(DeckOutput.model_json_schema(), indent=2)
+    system_prompt = f"""You are a top-tier startup pitch strategist for Malaysian grants.
+
+Generate exactly 3 slides total. Keep bullet points very brief.
+Each slide should still include concrete metrics and grant alignment.
+
+Recommended sequence:
+1. Vision + Problem + Solution
+2. Traction + Team
+3. Grant Ask + Outcomes
+
+Output strict JSON only matching this schema:
+{schema}
+"""
+    client = GLMClient()
+    result = await client.generate_json(
+        system_prompt=system_prompt,
+        user_prompt=_make_user_prompt(sme, grant),
+        temperature=0.5,
+    )
+    return DeckOutput(**result)
+
+
+async def draft_script(sme: SMEProfile, grant: GrantRequirement) -> ScriptOutput:
+    """Generate a tight 3-minute presentation script."""
+    schema = json.dumps(ScriptOutput.model_json_schema(), indent=2)
+    system_prompt = f"""You are an elite demo-day speaking coach and grant storyteller.
+
+Write a maximum of 2 paragraphs for the presentation script.
+Keep the tone professional, persuasive, and outcome-driven.
+
+Output strict JSON only matching this schema:
+{schema}
+"""
+    client = GLMClient()
+    result = await client.generate_json(
+        system_prompt=system_prompt,
+        user_prompt=_make_user_prompt(sme, grant),
+        temperature=0.5,
+    )
+    return ScriptOutput(**result)
+
+
+async def evaluate_deck(sme: SMEProfile, grant: GrantRequirement) -> DeckCritique:
+    """Critique an uploaded pitch deck when present."""
+    schema = json.dumps(DeckCritique.model_json_schema(), indent=2)
+    system_prompt = f"""You are an investor and grant-review panelist in Malaysia.
+
+Given the SME and grant context plus uploaded deck text, provide a rigorous
+critique with practical improvements.
+
+Output strict JSON only matching this schema:
+{schema}
+"""
+    client = GLMClient()
+    result = await client.generate_json(
+        system_prompt=system_prompt,
+        user_prompt=_make_user_prompt(sme, grant),
+        temperature=0.5,
+    )
+    return DeckCritique(**result)
 
 
 async def run_drafter(
     sme_data: SMEProfile,
     grant_data: GrantRequirement,
 ) -> DrafterOutput:
-    """Generate the grant submission package for a fully-ready SME."""
+    """Orchestrate parallel drafting or critique mode."""
+    if sme_data.uploaded_pitch_deck_text and sme_data.uploaded_pitch_deck_text.strip():
+        critique = await evaluate_deck(sme_data, grant_data)
+        return DrafterOutput(
+            proposal=None,
+            deck=None,
+            script=None,
+            deck_critique=critique,
+        )
 
-    schema_json = json.dumps(DrafterOutput.model_json_schema(), indent=2)
-    system_prompt = DRAFTER_SYSTEM_PROMPT_TEMPLATE.format(schema=schema_json)
-
-    user_prompt = (
-        f"SME Profile:\n{sme_data.model_dump_json(indent=2)}\n\n"
-        f"Grant Requirements:\n{grant_data.model_dump_json(indent=2)}"
+    proposal = await draft_proposal(sme_data, grant_data)
+    deck = await draft_deck(sme_data, grant_data)
+    script = await draft_script(sme_data, grant_data)
+    return DrafterOutput(
+        proposal=proposal,
+        deck=deck,
+        script=script,
+        deck_critique=None,
     )
-
-    client = GLMClient()
-    result_dict = await client.generate_json(
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        temperature=0.5,
-    )
-
-    return DrafterOutput(**result_dict)
 
 
 async def _main() -> None:
