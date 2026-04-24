@@ -22,6 +22,8 @@ class SMEProfile(BaseModel):
     requested_funding_rm: int
     outsourced_cost_rm: int
     has_end_user_partner: bool
+    documents_provided: List[str]
+    uploaded_pitch_deck_text: str | None = None
 
 
 class GrantRequirement(BaseModel):
@@ -34,6 +36,8 @@ class GrantRequirement(BaseModel):
     funding_tier_foreign_percent: int
     max_outsourcing_percent: int
     requires_end_user_partner: bool
+    mandatory_documents: List[str] = Field(default_factory=list)
+    application_roadmap: List[str] = Field(default_factory=list)
 
 
 class EvidenceTrace(BaseModel):
@@ -50,3 +54,33 @@ class EvaluatorOutput(BaseModel):
 
     evidence_traces: List[EvidenceTrace] = Field(default_factory=list)
     readiness_score: int
+
+
+class ActionStep(BaseModel):
+    document_name: str
+    explanation: str
+    action_required: str
+
+
+class CoachOutput(BaseModel):
+    encouraging_message: str
+    next_steps: List[ActionStep]
+
+
+class SlideContent(BaseModel):
+    slide_number: int
+    title: str
+    bullet_points: List[str]
+
+
+class DeckCritique(BaseModel):
+    strengths: List[str]
+    weaknesses: List[str]
+    action_items_to_improve: List[str]
+
+
+class DrafterOutput(BaseModel):
+    business_proposal_markdown: str
+    presentation_script_markdown: str
+    generated_deck: List[SlideContent] | None = None
+    deck_critique: DeckCritique | None = None
