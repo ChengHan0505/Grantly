@@ -11,8 +11,8 @@ Pixel-focused Flutter implementation of the provided Grantly UI/UX mockups:
 
 This frontend is designed to integrate with:
 
-- `../backend` (FastAPI service, default `http://localhost:8000`)
-- `../ai_sandbox` (optional AI bridge endpoint, default `http://localhost:8001`)
+- `backend` (FastAPI service, default `http://localhost:8000`)
+- `ai_sandbox` (optional AI bridge endpoint, default `http://localhost:8001`)
 
 Runtime URLs are controlled by compile-time defines in `lib/core/app_config.dart`.
 
@@ -26,7 +26,7 @@ python -m uvicorn backend.main:app --reload --port 8000
 
 ## Run frontend
 
-From this `frontend` folder:
+From repo root:
 
 ```powershell
 flutter pub get
