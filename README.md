@@ -1,5 +1,5 @@
 <div align="center" style="padding-bottom:20px;padding-top:20px">
-  <img src="frontend/assets/image/logo.png" 
+  <img src="frontend/assets/image/new_logo.png" 
        alt="Grantly Logo" 
        width="100" 
        style="background-color: white; border-radius: 12px; padding: 20px;" />
