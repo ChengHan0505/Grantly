@@ -1,33 +1,44 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import json
 import re
+import textwrap
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ai_sandbox.scout.runner import run_scout
-from ai_sandbox.scout.sources import (
+from backend.ai_sandbox.coach import run_coach
+from backend.ai_sandbox.scout.runner import run_scout
+from backend.ai_sandbox.scout.sources import (
     check_sources_health_from_sources,
     load_sources_from_curated_outputs,
     load_sources_from_file,
 )
-from ai_sandbox.scout.storage import read_last_report
-from ai_sandbox.pptx_drafter import (
+from backend.ai_sandbox.scout.storage import read_last_report
+from backend.ai_sandbox.pptx_drafter import (
     PPTX_MIME,
     build_creative_pitch_deck_pptx,
     build_pitch_deck_pptx,
+    build_pitch_deck_pptx_from_slides,
     build_pitch_deck_slides,
 )
+from backend.ai_sandbox.drafter import run_drafter
+from backend.ai_sandbox.schemas import EvaluatorOutput as AgentEvaluatorOutput
+from backend.ai_sandbox.schemas import EvidenceTrace as AgentEvidenceTrace
+from backend.ai_sandbox.schemas import GrantRequirement as AgentGrantRequirement
+from backend.ai_sandbox.schemas import SMEProfile as AgentSMEProfile
 from backend.src.api.schemas import (
+    ApplicationRoadmapRead,
     DraftApplicationRequest,
+    DocumentRead,
     DrafterOutputRead,
     GeneratedDocumentRead,
     GenerateDocumentRequest,
@@ -58,6 +69,9 @@ from backend.src.database.models import CompanyDocument, RequirementSource, Sess
 
 
 router = APIRouter(prefix="/grants", tags=["grants"])
+
+PDF_MIME = "application/pdf"
+TEXT_MIME = "text/plain"
 
 SCOUT_STATE: dict[str, Any] = {
     "status": "idle",
@@ -149,11 +163,11 @@ def _run_scout_job(source_file: str | None, run_mode: str, max_links_per_page: i
             elapsed_hours = (datetime.now(timezone.utc) - start_time).total_seconds() / 3600
             return bool(SCOUT_STATE["stop_requested"]) or elapsed_hours >= settings.scout_max_runtime_hours
 
-        sources = _load_default_scout_sources() if run_mode == "curated" else None
         report = run_scout(
             db,
             source_file=source_file,
-            sources_override=sources,
+            sources_override=None,
+            curated_files=_curated_source_files() if run_mode == "curated" else None,
             max_links_per_page_override=max_links_per_page,
             should_stop=should_stop,
         )
@@ -204,20 +218,403 @@ def _grant_deck_context(grant: Any) -> dict[str, Any]:
         "grant_name": grant.title,
         "title": grant.title,
         "provider_name": grant.provider_name,
+        "source_url": grant.source_url,
+        "description": grant.description,
         "amount_min": grant.amount_min,
         "amount_max": grant.amount_max,
         "industry": grant.industry,
         "nationality": grant.nationality,
+        "eligibility_notes": grant.eligibility_notes,
         "application_deadline": grant.application_deadline,
+        "mandatory_documents": [requirement.name for requirement in grant.requirements if requirement.is_required],
+        "requirements": [
+            {
+                "name": requirement.name,
+                "description": requirement.description,
+                "document_type": requirement.document_type,
+                "source_type": requirement.source_type.value,
+            }
+            for requirement in grant.requirements
+        ],
+    }
+
+
+def _int_value(value: Any, default: int = 0) -> int:
+    try:
+        if value in (None, "", [], {}):
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _money_rm(value: Any, fallback: str = "to be confirmed") -> str:
+    try:
+        if value in (None, "", [], {}):
+            return fallback
+        return f"RM {float(value):,.0f}"
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    cleaned = re.sub(r"[\\/:*?\"<>|]+", "_", (filename or "uploaded_document").strip())
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+    return cleaned[:180] or "uploaded_document"
+
+
+def _agent_sme_profile(profile: Any, documents: list[CompanyDocument]) -> AgentSMEProfile:
+    extracted = profile.extracted_data or {}
+    ownership = str(extracted.get("ownership_majority") or profile.nationality or "Local")
+    ownership_majority = "Foreign" if ownership.lower() == "foreign" else "Local"
+    return AgentSMEProfile(
+        company_name=profile.company_name or "Unknown Company",
+        ssm_number=str(extracted.get("ssm_number") or "Unknown"),
+        age_in_months=_int_value(extracted.get("age_in_months")),
+        full_time_employees=_int_value(profile.employee_count or extracted.get("full_time_employees")),
+        ownership_majority=ownership_majority,
+        sector=str(profile.industry or extracted.get("sector") or "General"),
+        total_project_cost_rm=_int_value(extracted.get("total_project_cost_rm") or profile.target_grant_amount),
+        requested_funding_rm=_int_value(profile.target_grant_amount or extracted.get("requested_funding_rm")),
+        outsourced_cost_rm=_int_value(extracted.get("outsourced_cost_rm")),
+        has_end_user_partner=bool(extracted.get("has_end_user_partner")),
+        documents_provided=[document.file_name for document in documents],
+        uploaded_pitch_deck_text=extracted.get("uploaded_pitch_deck_text"),
+    )
+
+
+def _agent_grant_requirement(grant: Any) -> AgentGrantRequirement:
+    mandatory_documents = [requirement.name for requirement in grant.requirements if requirement.is_required]
+    return AgentGrantRequirement(
+        grant_name=grant.title,
+        promoted_sectors=[grant.industry or "General"],
+        max_funding_rm=_int_value(grant.amount_max, 1000000),
+        funding_tier_local_percent=50,
+        funding_tier_foreign_percent=30,
+        max_outsourcing_percent=20,
+        requires_end_user_partner=any(
+            "partner" in (requirement.document_type or "").lower()
+            or "partner" in requirement.name.lower()
+            for requirement in grant.requirements
+        ),
+        mandatory_documents=mandatory_documents,
+        application_roadmap=[],
+    )
+
+
+def _roadmap_status_for_item(item: dict[str, Any]) -> str:
+    if item["fulfilled"]:
+        return "complete"
+    if item["can_generate"]:
+        return "ready_to_generate"
+    if item["can_upload"]:
+        return "needs_upload"
+    return "pending"
+
+
+def _coach_evaluator_output_from_snapshot(snapshot: dict[str, Any]) -> AgentEvaluatorOutput:
+    traces = []
+    for item in snapshot["checklist"]:
+        if not item["is_required"]:
+            continue
+        status = "MET" if item["fulfilled"] else "UNMET"
+        source = item.get("fulfillment_source") or item.get("document_type") or "Application Checklist"
+        if not item["fulfilled"] and item["can_generate"]:
+            source = "Drafter Agent"
+        traces.append(
+            AgentEvidenceTrace(
+                requirement=item["name"],
+                status=status,
+                source_document=source,
+                reasoning=item.get("description") or item.get("action_label") or "Requirement is pending.",
+            )
+        )
+    return AgentEvaluatorOutput(
+        evidence_traces=traces,
+        readiness_score=int(round(float(snapshot.get("readiness_score") or 0))),
+    )
+
+
+def _coach_step_lookup(coach: dict[str, Any] | None) -> dict[str, dict[str, str]]:
+    if not coach:
+        return {}
+    lookup = {}
+    for step in coach.get("next_steps", []):
+        key = _slug(str(step.get("document_name") or ""))
+        if key:
+            lookup[key] = step
+    return lookup
+
+
+def _build_application_roadmap(
+    snapshot: dict[str, Any],
+    coach: dict[str, Any] | None,
+    generated_by: str,
+) -> dict[str, Any]:
+    grant = snapshot["grant"]
+    checklist = snapshot["checklist"]
+    coach_steps = _coach_step_lookup(coach)
+    steps: list[dict[str, Any]] = [
+        {
+            "step_number": 1,
+            "title": "Confirm grant fit and deadline",
+            "status": "complete" if snapshot["readiness_score"] > 0 else "pending",
+            "owner": "Founder",
+            "description": f"Review {grant.title} by {grant.provider_name}, funding range, eligibility notes, and deadline before preparing documents.",
+            "action": "Open the source page, confirm the company is eligible, and keep the deadline in the application calendar.",
+            "requirement_id": None,
+            "document_type": None,
+            "download_url": None,
+        }
+    ]
+
+    for item in checklist:
+        if not item["is_required"]:
+            continue
+        coach_step = coach_steps.get(_slug(item["name"]))
+        if item["fulfilled"]:
+            description = f"{item['name']} is already covered by {item.get('fulfillment_source') or 'a stored document'}."
+            action = "No immediate action needed. Keep this evidence in the submission package."
+        elif item["can_generate"]:
+            description = coach_step.get("explanation") if coach_step else f"{item['name']} can be generated by Grantly for this application."
+            action = coach_step.get("action_required") if coach_step else "Click Generate or Run Drafter Agent, then review the generated output before submission."
+        else:
+            description = coach_step.get("explanation") if coach_step else (item.get("description") or f"{item['name']} is required before submission.")
+            action = coach_step.get("action_required") if coach_step else "Upload the required file from this checklist row so it can be linked to the grant package."
+        steps.append(
+            {
+                "step_number": len(steps) + 1,
+                "title": item["name"],
+                "status": _roadmap_status_for_item(item),
+                "owner": "Grantly AI" if item["can_generate"] and not item["fulfilled"] else "Founder",
+                "description": description,
+                "action": action,
+                "requirement_id": item["requirement_id"],
+                "document_type": item.get("document_type"),
+                "download_url": item.get("download_url"),
+            }
+        )
+
+    generated_types = {document.document_type for document in snapshot.get("generated_documents", [])}
+    has_proposal = "business_proposal" in generated_types
+    has_deck = "pitch_deck" in generated_types
+    steps.append(
+        {
+            "step_number": len(steps) + 1,
+            "title": "Generate proposal, pitch deck, and script",
+            "status": "complete" if has_proposal and has_deck else "ready_to_generate",
+            "owner": "Grantly AI",
+            "description": "The Drafter Agent prepares the professional proposal PDF, downloadable PPTX deck, and companion speaking script for the application.",
+            "action": "Run Drafter Agent, then review each output for factual accuracy and consistency with the company profile.",
+            "requirement_id": None,
+            "document_type": "drafter_bundle",
+            "download_url": None,
+        }
+    )
+    missing_count = len(snapshot.get("missing_required_documents", []))
+    steps.append(
+        {
+            "step_number": len(steps) + 1,
+            "title": "Review and package submission files",
+            "status": "ready" if missing_count == 0 else "blocked",
+            "owner": "Founder",
+            "description": "The submission package combines profile evidence, uploaded hard documents, and generated soft documents into one reviewable archive.",
+            "action": "Download the package, check file names and dates, and confirm every required item is present before submission.",
+            "requirement_id": None,
+            "document_type": "submission_package",
+            "download_url": snapshot.get("download_package_url"),
+        }
+    )
+    steps.append(
+        {
+            "step_number": len(steps) + 1,
+            "title": f"Submit to {grant.provider_name}",
+            "status": "pending" if missing_count == 0 else "blocked",
+            "owner": "Founder",
+            "description": "Submit through the official grant portal or agency channel, then keep acknowledgement receipts for audit and follow-up.",
+            "action": "Use the official source URL or agency instructions, submit before the deadline, and record the submission reference number.",
+            "requirement_id": None,
+            "document_type": None,
+            "download_url": None,
+        }
+    )
+
+    message = (
+        coach.get("encouraging_message")
+        if coach
+        else "This application is a practical pipeline: close the missing evidence, generate the soft documents, review the package, then submit through the official channel."
+    )
+    return {
+        "grant_id": grant.id,
+        "grant_title": grant.title,
+        "provider_name": grant.provider_name,
+        "generated_by": generated_by,
+        "encouraging_message": message,
+        "steps": steps,
     }
 
 
 def _pptx_response(content: bytes, filename: str) -> StreamingResponse:
+    return _bytes_response(content, PPTX_MIME, filename)
+
+
+def _bytes_response(content: bytes, content_type: str, filename: str) -> StreamingResponse:
     return StreamingResponse(
         io.BytesIO(content),
-        media_type=PPTX_MIME,
+        media_type=content_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _plain_text_from_markdown(content: str) -> str:
+    lines: list[str] = []
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if line.startswith("#"):
+            line = line.lstrip("#").strip().upper()
+        elif line.startswith("- "):
+            line = f"* {line[2:].strip()}"
+        lines.append(line)
+    return "\n".join(lines).strip() + "\n"
+
+
+def _pdf_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _pdf_lines_from_markdown(content: str, width: int = 88) -> list[str]:
+    lines: list[str] = []
+    for raw_line in _plain_text_from_markdown(content).splitlines():
+        if not raw_line.strip():
+            lines.append("")
+            continue
+        lines.extend(textwrap.wrap(raw_line, width=width, break_long_words=False) or [""])
+    return lines
+
+
+def _pdf_bytes_from_text(title: str, content: str) -> bytes:
+    all_lines = [title.upper(), ""] + _pdf_lines_from_markdown(content)
+    lines_per_page = 52
+    pages = [all_lines[index : index + lines_per_page] for index in range(0, len(all_lines), lines_per_page)] or [[]]
+
+    objects: dict[int, bytes] = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        3: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    }
+    kids: list[int] = []
+    next_object_id = 4
+    for page_lines in pages:
+        commands = ["BT", "/F1 11 Tf", "50 792 Td", "14 TL"]
+        for line in page_lines:
+            if line:
+                commands.append(f"({_pdf_escape(line)}) Tj")
+            commands.append("T*")
+        commands.append("ET")
+        stream = "\n".join(commands).encode("latin-1", "replace")
+        content_id = next_object_id
+        page_id = next_object_id + 1
+        next_object_id += 2
+        objects[content_id] = b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"
+        objects[page_id] = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {content_id} 0 R >>"
+        ).encode("ascii")
+        kids.append(page_id)
+
+    kids_refs = " ".join(f"{page_id} 0 R" for page_id in kids)
+    objects[2] = f"<< /Type /Pages /Kids [{kids_refs}] /Count {len(kids)} >>".encode("ascii")
+
+    buffer = io.BytesIO()
+    buffer.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for object_id in range(1, max(objects) + 1):
+        offsets.append(buffer.tell())
+        buffer.write(f"{object_id} 0 obj\n".encode("ascii"))
+        buffer.write(objects[object_id])
+        buffer.write(b"\nendobj\n")
+    xref_at = buffer.tell()
+    buffer.write(f"xref\n0 {len(offsets)}\n".encode("ascii"))
+    buffer.write(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        buffer.write(f"{offset:010d} 00000 n \n".encode("ascii"))
+    buffer.write(
+        f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n".encode("ascii")
+    )
+    return buffer.getvalue()
+
+
+def _professional_business_proposal_markdown(
+    grant: Any,
+    profile: Any,
+    extra_context: dict[str, Any] | None = None,
+) -> str:
+    extracted = profile.extracted_data or {}
+    company_name = profile.company_name or "Applicant Company"
+    sector = profile.industry or extracted.get("sector") or "the target sector"
+    summary = profile.summary or "The company is preparing a grant-funded project to strengthen business capability and market readiness."
+    requested_amount = profile.target_grant_amount or extracted.get("requested_funding_rm")
+    project_cost = extracted.get("total_project_cost_rm") or requested_amount
+    employees = profile.employee_count or extracted.get("full_time_employees") or "not specified"
+    ownership = profile.nationality or extracted.get("ownership_majority") or "not specified"
+    documents = ", ".join(requirement.name for requirement in grant.requirements if requirement.is_required) or "agency-required supporting documents"
+    grant_cap = _money_rm(grant.amount_max, "subject to the grant cap")
+    deadline = grant.application_deadline or "the published application window"
+    extra = ""
+    if extra_context:
+        extra = f"\n\nAdditional submission context: {json.dumps(extra_context, ensure_ascii=True)}"
+
+    return f"""# Business Proposal: {company_name} for {grant.title}
+
+## 1. Executive Summary
+{company_name} is a Malaysian SME operating in {sector}. The company is applying to {grant.provider_name} under {grant.title} to co-fund a practical growth project with direct commercial and capability-building outcomes. The requested support is {_money_rm(requested_amount, "an amount aligned with the eligible funding tier")} against a total project cost of {_money_rm(project_cost)}. The proposal is designed to be executable, auditable, and aligned with the grant objective rather than a general marketing claim.
+
+## 2. Company Background
+{summary}
+
+The company profile records {employees} full-time employee(s), ownership or nationality status of {ownership}, and an operating focus in {sector}. These details position the applicant for eligibility screening, while the attached company documents should be used to verify registration, financial standing, and management accountability.
+
+## 3. Problem And Opportunity
+The project addresses a measurable business gap: improving execution capacity, market readiness, and delivery quality while reducing the risk of underfunded implementation. Without grant support, the company would need to slow the project, defer key work packages, or reduce the scope of validation. With support from {grant.title}, the applicant can execute the project within a clearer timeline and demonstrate outcomes that are relevant to both the business and the grant agency.
+
+## 4. Proposed Solution
+The applicant will deploy the funding into a focused implementation plan covering product or service enhancement, operational readiness, validation activity, and go-to-market preparation. The solution will be managed internally with accountable milestones, vendor controls where outsourcing is required, and documented evidence for each completed work package. This approach keeps the proposal practical for assessment and easier to audit after award.
+
+## 5. Grant Alignment
+The grant is provided by {grant.provider_name}, with a funding ceiling of {grant_cap}. The company's sector focus, Malaysian SME profile, project funding ask, and required supporting documents are intended to map directly to the published eligibility criteria. Required checklist items for this application include: {documents}. The application should be submitted by {deadline}, subject to portal availability and agency confirmation.
+
+## 6. Use Of Funds
+- Project execution and technical delivery: build, configure, test, and deploy the funded work packages.
+- Validation and compliance evidence: prepare measurable proof that the project is delivered responsibly.
+- Commercial readiness: improve materials, pilots, demonstrations, or customer-facing readiness needed for adoption.
+- Reporting and governance: maintain documentation for claims, procurement records, milestone evidence, and post-award reporting.
+
+## 7. Implementation Timeline And KPIs
+- Month 1: finalize project scope, suppliers, internal owners, and compliance checklist.
+- Months 2-3: execute the main delivery work packages and collect milestone evidence.
+- Month 4: complete validation, financial reconciliation, and outcome reporting.
+- KPIs: delivery of agreed milestones, evidence-ready documentation, controlled use of funds, improved operational capacity, and a clearer path to revenue or adoption.
+
+## 8. Risk Management
+Key risks include delayed documentation, supplier delivery risk, cost variance, and insufficient evidence for claims. The company will mitigate these risks through early document collection, milestone-based vendor management, budget tracking, and a single internal owner for grant compliance. Any scope changes should be documented before submission or claim activity.
+
+## 9. Closing Request
+{company_name} respectfully requests consideration for {grant.title}. The requested funding will help convert a defined business need into a controlled implementation project with measurable outcomes, stronger SME capability, and clearer evidence for agency review.{extra}
+"""
+
+
+def _ensure_professional_business_proposal(
+    content: str | None,
+    grant: Any,
+    profile: Any,
+    extra_context: dict[str, Any] | None = None,
+) -> str:
+    if content and len(_plain_text_from_markdown(content)) >= 1400 and content.count("##") >= 4:
+        return content.strip() + "\n"
+
+    baseline = _professional_business_proposal_markdown(grant, profile, extra_context)
+    if content and content.strip():
+        return baseline + "\n\n## 10. Drafter Agent Narrative\n" + content.strip() + "\n"
+    return baseline
 
 
 def _render_generated_document(
@@ -235,30 +632,13 @@ def _render_generated_document(
     employees = profile.employee_count or extracted.get("full_time_employees")
 
     if document_type == "pitch_deck":
-        return (
-            f"# {company_name} Pitch Deck for {grant.title}\n\n"
-            "## Slide 1: Problem and Solution\n"
-            f"- {company_name} operates in {sector} and is applying for {grant.title}.\n"
-            "- The project addresses a practical SME growth or digitalisation gap.\n\n"
-            "## Slide 2: Traction and Execution\n"
-            f"- Team size: {employees or 'not specified'} full-time employees.\n"
-            f"- Total project cost: RM {project_cost or 'not specified'}.\n\n"
-            "## Slide 3: Grant Ask and Use of Funds\n"
-            f"- Requested funding: RM {requested_amount or 'not specified'}.\n"
-            f"- Provider: {grant.provider_name}.\n"
-        )
+        profile_context = _profile_deck_context(profile)
+        grant_context = {**_grant_deck_context(grant), **extra_context}
+        slides = build_pitch_deck_slides(profile_context, grant_context)
+        return _deck_markdown_from_slides(slides)
 
     if document_type in {"business_proposal", "proposal"}:
-        return (
-            f"# Business Proposal: {grant.title}\n\n"
-            f"{company_name} is a Malaysian SME in {sector} seeking support from "
-            f"{grant.provider_name} through {grant.title}. The company is requesting "
-            f"RM {requested_amount or 'an amount aligned with the grant cap'} to co-fund "
-            f"a project with total cost RM {project_cost or 'to be confirmed'}. "
-            "The proposal emphasizes eligibility, execution readiness, measurable outcomes, "
-            "and responsible use of funds.\n\n"
-            f"Additional context: {json.dumps(extra_context, ensure_ascii=True)}\n"
-        )
+        return _professional_business_proposal_markdown(grant, profile, extra_context)
 
     if document_type == "company_profile":
         return (
@@ -323,6 +703,96 @@ def _store_generated_markdown(
     )
 
 
+def _store_generated_text(
+    db: Session,
+    user_id: int,
+    grant_id: int,
+    grant_title: str,
+    document_type: str,
+    document_name: str,
+    content: str,
+    extra_metadata: dict[str, Any] | None = None,
+) -> CompanyDocument:
+    metadata = {
+        "source": "drafter_agent",
+        "grant_id": grant_id,
+        "content_type": TEXT_MIME,
+        "content_markdown": content,
+        "generated_at": _utc_now_iso(),
+    }
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    return upsert_company_document(
+        db,
+        user_id,
+        {
+            "document_type": document_type,
+            "file_name": f"{_slug(grant_title)}_{_slug(document_name)}.txt",
+            "file_url": None,
+            "status": "generated",
+            "metadata": metadata,
+        },
+    )
+
+
+def _store_generated_binary(
+    db: Session,
+    user_id: int,
+    grant_id: int,
+    document_type: str,
+    filename: str,
+    content: bytes,
+    content_type: str,
+    extra_metadata: dict[str, Any] | None = None,
+) -> CompanyDocument:
+    metadata = {
+        "source": "drafter_agent",
+        "grant_id": grant_id,
+        "content_type": content_type,
+        "content_base64": base64.b64encode(content).decode("ascii"),
+        "generated_at": _utc_now_iso(),
+    }
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    return upsert_company_document(
+        db,
+        user_id,
+        {
+            "document_type": document_type,
+            "file_name": filename,
+            "file_url": None,
+            "status": "generated",
+            "metadata": metadata,
+        },
+    )
+
+
+def _store_generated_pdf(
+    db: Session,
+    user_id: int,
+    grant_id: int,
+    grant_title: str,
+    document_type: str,
+    document_name: str,
+    markdown_content: str,
+    extra_metadata: dict[str, Any] | None = None,
+) -> CompanyDocument:
+    filename = f"{_slug(grant_title)}_{_slug(document_name)}.pdf"
+    metadata = {"content_markdown": markdown_content}
+    if extra_metadata:
+        metadata.update(extra_metadata)
+    return _store_generated_binary(
+        db=db,
+        user_id=user_id,
+        grant_id=grant_id,
+        document_type=document_type,
+        filename=filename,
+        content=_pdf_bytes_from_text(document_name, markdown_content),
+        content_type=PDF_MIME,
+        extra_metadata=metadata,
+    )
+
+
 def _store_generated_pptx(
     db: Session,
     user_id: int,
@@ -334,24 +804,15 @@ def _store_generated_pptx(
 ) -> CompanyDocument:
     if not filename.lower().endswith(".pptx"):
         filename = f"{filename}.pptx"
-    return upsert_company_document(
-        db,
-        user_id,
-        {
-            "document_type": "pitch_deck",
-            "file_name": filename,
-            "file_url": None,
-            "status": "generated",
-            "metadata": {
-                "source": "drafter_agent",
-                "grant_id": grant_id,
-                "content_type": PPTX_MIME,
-                "content_base64": base64.b64encode(content).decode("ascii"),
-                "layout_plan": layout_plan,
-                "generation_mode": generation_mode,
-                "generated_at": _utc_now_iso(),
-            },
-        },
+    return _store_generated_binary(
+        db=db,
+        user_id=user_id,
+        grant_id=grant_id,
+        document_type="pitch_deck",
+        filename=filename,
+        content=content,
+        content_type=PPTX_MIME,
+        extra_metadata={"layout_plan": layout_plan, "generation_mode": generation_mode},
     )
 
 
@@ -370,11 +831,22 @@ def _stored_pptx_document(db: Session, user_id: int, grant_id: int) -> CompanyDo
     return None
 
 
-def _pptx_bytes_from_document(document: CompanyDocument) -> bytes | None:
+def _binary_bytes_from_document(document: CompanyDocument) -> tuple[bytes, str] | None:
     content_base64 = document.metadata_json.get("content_base64")
     if not content_base64:
         return None
-    return base64.b64decode(content_base64)
+    content_type = document.metadata_json.get("content_type") or "application/octet-stream"
+    return base64.b64decode(content_base64), content_type
+
+
+def _pptx_bytes_from_document(document: CompanyDocument) -> bytes | None:
+    binary = _binary_bytes_from_document(document)
+    if not binary:
+        return None
+    content, content_type = binary
+    if content_type != PPTX_MIME and not document.file_name.lower().endswith(".pptx"):
+        return None
+    return content
 
 
 def _generated_file_summary(document: CompanyDocument) -> dict[str, Any]:
@@ -389,6 +861,253 @@ def _generated_file_summary(document: CompanyDocument) -> dict[str, Any]:
     }
 
 
+def _slide_bullets(slide: dict[str, Any]) -> list[str]:
+    raw = slide.get("bullet_points") or slide.get("bullets") or []
+    return [str(item).strip() for item in raw if str(item).strip()]
+
+
+def _slide_metrics(slide: dict[str, Any]) -> list[dict[str, str]]:
+    metrics = []
+    for raw_metric in slide.get("metrics") or []:
+        if not isinstance(raw_metric, dict):
+            continue
+        label = str(raw_metric.get("label") or "Metric").strip()
+        value = str(raw_metric.get("value") or "").strip()
+        if label or value:
+            metrics.append({"label": label or "Metric", "value": value})
+    return metrics
+
+
+def _sentence(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return ""
+    return text if text.endswith((".", "!", "?")) else f"{text}."
+
+
+def _format_metric_list(metrics: list[dict[str, str]]) -> str:
+    return "; ".join(
+        f"{metric['label']}: {metric['value']}"
+        for metric in metrics
+        if metric.get("value")
+    )
+
+
+def _evidence_hint_for_slide(title: str, bullets: list[str]) -> str:
+    text = f"{title} {' '.join(bullets)}".lower()
+    hints = []
+    if any(keyword in text for keyword in ("company", "eligibility", "ownership", "employee", "document")):
+        hints.append("company profile, SSM details, and document checklist")
+    if any(keyword in text for keyword in ("fund", "budget", "cost", "outsourc", "grant cap")):
+        hints.append("budget table, quotations, and grant cap calculation")
+    if any(keyword in text for keyword in ("timeline", "milestone", "kpi", "risk")):
+        hints.append("implementation timeline, KPI tracker, and risk register")
+    if any(keyword in text for keyword in ("solution", "validation", "partner", "market")):
+        hints.append("product demo, validation notes, partner evidence, or customer proof")
+    return "; ".join(dict.fromkeys(hints)) or "source documents and proposal figures for this section"
+
+
+def _is_informative_deck(slides: list[dict[str, Any]] | None) -> bool:
+    if not slides or len(slides) < 7:
+        return False
+    total_bullets = sum(len(_slide_bullets(slide)) for slide in slides)
+    return total_bullets >= len(slides) * 3
+
+
+def _ensure_informative_pitch_deck(
+    slides: list[dict[str, Any]] | None,
+    fallback_slides: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if _is_informative_deck(slides):
+        return slides or fallback_slides
+    return fallback_slides
+
+
+def _deck_markdown_from_slides(slides: list[dict[str, Any]]) -> str:
+    lines = ["# Generated Pitch Deck", ""]
+    for index, slide in enumerate(slides, start=1):
+        slide_number = slide.get("slide_number") or index
+        title = str(slide.get("title") or f"Slide {slide_number}")
+        subtitle = str(slide.get("subtitle") or "").strip()
+        bullets = _slide_bullets(slide)
+        metrics = _slide_metrics(slide)
+        grant_alignment = str(slide.get("grant_alignment") or "").strip()
+        speaker_notes = str(slide.get("speaker_notes") or "").strip()
+
+        lines.append(f"## Slide {slide_number}: {title}")
+        if subtitle:
+            lines.append(f"_{subtitle}_")
+            lines.append("")
+        if bullets:
+            lines.append("### Key Messages")
+            lines.extend(f"- {point}" for point in bullets)
+            lines.append("")
+        if metrics:
+            lines.append("### Metrics")
+            lines.extend(f"- {metric['label']}: {metric['value']}" for metric in metrics)
+            lines.append("")
+        if grant_alignment:
+            lines.append(f"### Grant Alignment\n{grant_alignment}\n")
+        if speaker_notes:
+            lines.append(f"### Presenter Notes\n{speaker_notes}\n")
+    return "\n".join(lines).strip() + "\n"
+
+
+def _build_pitch_deck_script(
+    company_name: str,
+    grant_title: str,
+    provider_name: str,
+    slides: list[dict[str, Any]] | None,
+    fallback_context: str | None = None,
+) -> str:
+    slide_count = len(slides or [])
+    seconds_per_slide = max(35, min(60, round(390 / slide_count))) if slide_count else 45
+    lines = [
+        f"# Pitch Deck Speaking Script: {grant_title}",
+        "",
+        "## Presenter Setup",
+        f"- Target length: 6-8 minutes; aim for about {seconds_per_slide} seconds per slide.",
+        "- Keep every number consistent with the proposal, company profile, and supporting documents.",
+        "- Pause after budget, eligibility, and KPI slides so panel members can note the evidence.",
+        "",
+        "## Opening",
+        (
+            f"Good day. We are {company_name}, and we are applying for {grant_title} from {provider_name}. "
+            "Today I will explain the company profile, the project need, the funding request, "
+            "how the funds will be governed, and the outcomes we will report back to the agency."
+        ),
+        "",
+    ]
+
+    if slides:
+        for index, slide in enumerate(slides, start=1):
+            slide_number = slide.get("slide_number") or index
+            title = str(slide.get("title") or f"Slide {slide_number}").strip()
+            subtitle = str(slide.get("subtitle") or "").strip()
+            bullets = _slide_bullets(slide)
+            metrics = _slide_metrics(slide)
+            grant_alignment = str(slide.get("grant_alignment") or "").strip()
+            speaker_notes = str(slide.get("speaker_notes") or "").strip()
+            next_title = str(slides[index].get("title") or f"Slide {index + 1}").strip() if index < slide_count else ""
+
+            lines.append(f"## Slide {slide_number}: {title}")
+            if subtitle:
+                lines.append(f"Purpose: {_sentence(subtitle)}")
+            lines.append("Talk track:")
+            if speaker_notes:
+                lines.append(_sentence(speaker_notes))
+            elif bullets:
+                lines.append(f"Start by stating: {_sentence(bullets[0])}")
+                for point in bullets[1:4]:
+                    lines.append(f"Then explain: {_sentence(point)}")
+                if len(bullets) > 4:
+                    lines.append(f"Close the slide with: {_sentence(bullets[4])}")
+            else:
+                lines.append("Introduce this section and connect it directly to the grant review criteria.")
+            if metrics:
+                metric_text = _format_metric_list(metrics)
+                if metric_text:
+                    lines.append(f"Figures to say out loud: {_sentence(metric_text)}")
+            if grant_alignment:
+                lines.append(f"Grant alignment: {_sentence(grant_alignment)}")
+            lines.append(f"Evidence to have ready: {_evidence_hint_for_slide(title, bullets)}.")
+            if next_title:
+                lines.append(f"Transition: With that context, move into {next_title} and show how the next point supports the same funding decision.")
+            else:
+                lines.append("Transition: Move from this slide into the final ask and invite questions.")
+            lines.append("")
+    elif fallback_context:
+        lines.extend(
+            [
+                "## Uploaded Deck Talk Track",
+                "Use the uploaded deck as the visual source, but strengthen the narration with the grant criteria.",
+                "",
+                "Key narrative to retain:",
+                fallback_context[:1800],
+                "",
+                "Before presenting, add verbal links to funding amount, use of funds, eligibility documents, milestones, KPIs, and risk controls.",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Closing Ask",
+            (
+                f"In closing, {company_name} is requesting support under {grant_title} to execute a controlled, "
+                "evidence-backed project. We are ready to provide the required documents, answer questions on the budget, "
+                "and report milestones responsibly after award."
+            ),
+            "",
+            "## Likely Panel Questions",
+            "- How exactly will the requested funding be used? Answer with the budget categories, project cost, and audit evidence.",
+            "- What proves the company can execute? Answer with team size, operating history, documents, partners, and milestone owners.",
+            "- What are the key risks? Answer with document, supplier, cost, and evidence risks plus the mitigation plan.",
+            "- What outcomes will the agency see? Answer with KPIs, reporting milestones, capability gains, and commercial readiness.",
+        ]
+    )
+    return "\n".join(lines).strip() + "\n"
+
+
+def _ensure_pitch_deck_script(
+    content: str | None,
+    company_name: str,
+    grant_title: str,
+    provider_name: str,
+    slides: list[dict[str, Any]] | None,
+    fallback_context: str | None = None,
+) -> str:
+    baseline = _build_pitch_deck_script(
+        company_name=company_name,
+        grant_title=grant_title,
+        provider_name=provider_name,
+        slides=slides,
+        fallback_context=fallback_context,
+    )
+    if not content or not content.strip():
+        return baseline
+
+    plain = _plain_text_from_markdown(content)
+    expected_slide_mentions = min(5, len(slides or []))
+    if len(plain) >= 1800 and plain.lower().count("slide") >= expected_slide_mentions:
+        return content.strip() + "\n"
+    return baseline + "\n## Additional Drafter Agent Notes\n" + content.strip() + "\n"
+
+
+def _slides_for_response(slides: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "slide_number": int(slide.get("slide_number") or index),
+            "title": str(slide.get("title") or f"Slide {index}"),
+            "subtitle": str(slide.get("subtitle") or "") or None,
+            "bullet_points": _slide_bullets(slide),
+            "metrics": _slide_metrics(slide),
+            "grant_alignment": str(slide.get("grant_alignment") or "") or None,
+            "speaker_notes": str(slide.get("speaker_notes") or "") or None,
+        }
+        for index, slide in enumerate(slides, start=1)
+    ]
+
+
+def _slides_for_pptx(slides: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    layouts = ["hero", "split", "cards", "split", "metrics", "split", "timeline", "closing"]
+    accents = ["0087A5", "494BD6", "00A676", "E09F3E"]
+    valid_layouts = {"hero", "split", "metrics", "timeline", "cards", "closing"}
+    return [
+        {
+            "title": str(slide.get("title") or f"Slide {index}"),
+            "subtitle": str(slide.get("subtitle") or ""),
+            "layout": str(slide.get("layout") if slide.get("layout") in valid_layouts else layouts[min(index - 1, len(layouts) - 1)]),
+            "accent_color": str(slide.get("accent_color") or accents[(index - 1) % len(accents)]),
+            "bullets": _slide_bullets(slide),
+            "metrics": _slide_metrics(slide),
+            "grant_alignment": str(slide.get("grant_alignment") or ""),
+            "speaker_notes": str(slide.get("speaker_notes") or ""),
+        }
+        for index, slide in enumerate(slides, start=1)
+    ]
+
+
 @router.post("", response_model=GrantRead, status_code=status.HTTP_201_CREATED)
 def create_grant_record(payload: GrantCreate, db: Session = Depends(get_db)):
     grant = create_grant(db, payload.model_dump())
@@ -396,8 +1115,8 @@ def create_grant_record(payload: GrantCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[GrantRead])
-def list_grant_records(db: Session = Depends(get_db)):
-    return list_grants(db)
+def list_grant_records(include_all: bool = False, db: Session = Depends(get_db)):
+    return list_grants(db, include_all=include_all)
 
 
 @router.get("/match/{user_id}", response_model=list[RankedGrantRead])
@@ -473,8 +1192,7 @@ def get_grant_scout_status():
 
 @router.post("/scout/run")
 def run_grant_scout(db: Session = Depends(get_db)):
-    sources = _load_default_scout_sources()
-    report = run_scout(db, sources_override=sources)
+    report = run_scout(db, curated_files=_curated_source_files())
     if report.get("status") == "error":
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=report["message"])
     SCOUT_STATE.update({"status": report.get("status", "ok"), "last_report": report, "finished_at": _utc_now_iso()})
@@ -525,6 +1243,31 @@ def get_grant_application(grant_id: int, user_id: int, db: Session = Depends(get
     return snapshot
 
 
+@router.get("/{grant_id}/application/{user_id}/roadmap", response_model=ApplicationRoadmapRead)
+async def get_application_roadmap(grant_id: int, user_id: int, db: Session = Depends(get_db)):
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    snapshot = build_grant_application_snapshot(db, user_id, grant_id)
+    if snapshot is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grant not found.")
+
+    try:
+        coach_output = await asyncio.wait_for(
+            run_coach(_coach_evaluator_output_from_snapshot(snapshot)),
+            timeout=18,
+        )
+        coach = coach_output.model_dump()
+        generated_by = "zai_coach_agent"
+    except Exception as exc:  # noqa: BLE001
+        coach = snapshot.get("coach") or {
+            "encouraging_message": f"Coach Agent fallback is active while live generation is unavailable: {str(exc)[:160]}",
+            "next_steps": [],
+        }
+        generated_by = "deterministic_coach_fallback"
+
+    return _build_application_roadmap(snapshot, coach, generated_by)
+
+
 @router.post("/{grant_id}/application/{user_id}/documents/generate", response_model=GeneratedDocumentRead)
 def generate_application_document(
     grant_id: int,
@@ -555,19 +1298,32 @@ def generate_application_document(
     document_name = document_name or document_type.replace("_", " ").title()
     content = _render_generated_document(document_name, document_type, grant, profile, payload.extra_context)
 
-    document = _store_generated_markdown(
-        db,
-        user_id,
-        grant_id,
-        grant.title,
-        document_type,
-        document_name,
-        content,
-        {
-            "requirement_id": requirement.id if requirement else None,
-            "extra_context": payload.extra_context,
-        },
-    )
+    metadata = {
+        "requirement_id": requirement.id if requirement else None,
+        "extra_context": payload.extra_context,
+    }
+    if document_type in {"business_proposal", "proposal"}:
+        document = _store_generated_pdf(
+            db,
+            user_id,
+            grant_id,
+            grant.title,
+            document_type,
+            document_name,
+            content,
+            metadata,
+        )
+    else:
+        document = _store_generated_markdown(
+            db,
+            user_id,
+            grant_id,
+            grant.title,
+            document_type,
+            document_name,
+            content,
+            metadata,
+        )
     return {
         "document": document,
         "requirement_id": requirement.id if requirement else None,
@@ -577,8 +1333,56 @@ def generate_application_document(
     }
 
 
+@router.post("/{grant_id}/application/{user_id}/documents/upload", response_model=DocumentRead)
+async def upload_application_document(
+    grant_id: int,
+    user_id: int,
+    document_type: str = Form(...),
+    document_name: str | None = Form(None),
+    requirement_id: int | None = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    grant = get_grant_by_id(db, grant_id)
+    if grant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grant not found.")
+    if requirement_id is not None and not any(requirement.id == requirement_id for requirement in grant.requirements):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Requirement not found for this grant.")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty.")
+
+    safe_filename = _safe_upload_filename(file.filename)
+    content_type = file.content_type or "application/octet-stream"
+    document = upsert_company_document(
+        db,
+        user_id,
+        {
+            "document_type": document_type or _slug(document_name or safe_filename),
+            "file_name": safe_filename,
+            "file_url": None,
+            "status": "uploaded",
+            "metadata": {
+                "source": "grant_application_upload",
+                "grant_id": grant_id,
+                "grant_title": grant.title,
+                "requirement_id": requirement_id,
+                "document_name": document_name,
+                "content_type": content_type,
+                "content_base64": base64.b64encode(content).decode("ascii"),
+                "size_bytes": len(content),
+                "uploaded_at": _utc_now_iso(),
+            },
+        },
+    )
+    return document
+
+
 @router.post("/{grant_id}/application/{user_id}/draft", response_model=DrafterOutputRead)
-def draft_application_bundle(
+async def draft_application_bundle(
     grant_id: int,
     user_id: int,
     payload: DraftApplicationRequest,
@@ -593,15 +1397,7 @@ def draft_application_bundle(
     snapshot = build_grant_application_snapshot(db, user_id, grant_id)
     if snapshot is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grant not found.")
-    if snapshot["track"] != "drafter":
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "message": "Complete the hard-document checklist before running the Drafter Agent.",
-                "readiness_score": snapshot["readiness_score"],
-                "missing_required_documents": snapshot["missing_required_documents"],
-            },
-        )
+    documents = get_company_documents(db, user_id)
 
     business_proposal = _render_generated_document(
         "Business Proposal",
@@ -610,34 +1406,62 @@ def draft_application_bundle(
         profile,
         payload.extra_context,
     )
-    presentation_script = (
-        f"# Presentation Script: {grant.title}\n\n"
-        f"Good day. {profile.company_name} is applying for {grant.title} from {grant.provider_name}. "
-        f"Our company operates in {profile.industry or 'the target sector'} and is seeking "
-        f"RM {profile.target_grant_amount or 'an aligned funding amount'} to execute a focused growth project. "
-        "This submission is backed by the required company documents and a clear plan for responsible delivery."
-    )
 
     extracted = profile.extracted_data or {}
     uploaded_deck_text = payload.uploaded_pitch_deck_text or extracted.get("uploaded_pitch_deck_text")
+    profile_context = _profile_deck_context(profile)
+    grant_context = {**_grant_deck_context(grant), **payload.extra_context}
+    pitch_deck_slides = build_pitch_deck_slides(profile_context, grant_context)
     generated_deck = None
     deck_critique = None
+    presentation_script_override = None
+    drafter_metadata: dict[str, Any] = {"bundle": "drafter", "readiness_track": snapshot["track"]}
+    try:
+        agent_sme_profile = _agent_sme_profile(profile, documents)
+        if uploaded_deck_text:
+            agent_sme_profile = agent_sme_profile.model_copy(update={"uploaded_pitch_deck_text": uploaded_deck_text})
+        agent_output = await asyncio.wait_for(
+            run_drafter(agent_sme_profile, _agent_grant_requirement(grant)),
+            timeout=35,
+        )
+        drafter_metadata["agent_mode"] = "zai_drafter"
+        if agent_output.proposal:
+            business_proposal = agent_output.proposal.business_proposal_markdown
+        if agent_output.deck:
+            generated_deck = [slide.model_dump() for slide in agent_output.deck.generated_deck]
+        if agent_output.script:
+            presentation_script_override = agent_output.script.presentation_script_markdown
+        if agent_output.deck_critique:
+            deck_critique = agent_output.deck_critique.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        drafter_metadata["agent_mode"] = "deterministic_fallback"
+        drafter_metadata["agent_error"] = str(exc)[:300]
+        presentation_script_override = None
+    business_proposal = _ensure_professional_business_proposal(
+        business_proposal,
+        grant,
+        profile,
+        payload.extra_context,
+    )
+
     if uploaded_deck_text:
-        deck_critique = {
-            "strengths": [
-                "The uploaded deck gives the Drafter Agent a concrete founder narrative to refine.",
-                "Existing material can be reused instead of starting from a blank page.",
-            ],
-            "weaknesses": [
-                "Ensure the deck explicitly connects project cost, funding ask, and grant outcomes.",
-                "Add evidence for traction, partner validation, and document readiness where possible.",
-            ],
-            "action_items_to_improve": [
-                "Add one slide on use of funds.",
-                "Add one slide mapping the company profile to the grant criteria.",
-                "Keep financial figures consistent with the company profile.",
-            ],
-        }
+        active_slides = generated_deck or pitch_deck_slides
+        if deck_critique is None:
+            deck_critique = {
+                "strengths": [
+                    "The uploaded deck gives the Drafter Agent a concrete founder narrative to refine.",
+                    "Existing material can be reused instead of starting from a blank page.",
+                ],
+                "weaknesses": [
+                    "Ensure the deck explicitly connects project cost, funding ask, and grant outcomes.",
+                    "Add evidence for traction, partner validation, and document readiness where possible.",
+                ],
+                "action_items_to_improve": [
+                    "Add one slide on use of funds.",
+                    "Add one slide mapping the company profile to the grant criteria.",
+                    "Keep financial figures consistent with the company profile.",
+                ],
+            }
         deck_markdown = (
             "# Pitch Deck Critique\n\n"
             "## Strengths\n"
@@ -651,48 +1475,35 @@ def draft_application_bundle(
         deck_document_type = "pitch_deck_critique"
         deck_document_name = "Pitch Deck Critique"
     else:
-        generated_deck = [
-            {
-                "slide_number": 1,
-                "title": "Problem and Solution",
-                "bullet_points": [
-                    f"{profile.company_name} addresses a practical gap in {profile.industry or 'the target sector'}.",
-                    "The proposed project is aligned with the grant's intended outcomes.",
-                    "The solution is scoped for measurable delivery after funding.",
-                ],
-            },
-            {
-                "slide_number": 2,
-                "title": "Traction and Team",
-                "bullet_points": [
-                    f"Team size: {profile.employee_count or 'not specified'} full-time employees.",
-                    "Core company documents are available for submission.",
-                    "Execution risk is reduced through a focused application checklist.",
-                ],
-            },
-            {
-                "slide_number": 3,
-                "title": "Ask and Use of Funds",
-                "bullet_points": [
-                    f"Target grant amount: RM {profile.target_grant_amount or 'not specified'}.",
-                    f"Provider: {grant.provider_name}.",
-                    "Funds will support project delivery and application outcomes.",
-                ],
-            },
-        ]
-        deck_markdown = "# Generated Pitch Deck\n\n" + "\n\n".join(
-            "## Slide {slide_number}: {title}\n{bullets}".format(
-                slide_number=slide["slide_number"],
-                title=slide["title"],
-                bullets="\n".join(f"- {point}" for point in slide["bullet_points"]),
-            )
-            for slide in generated_deck
-        )
+        active_slides = _ensure_informative_pitch_deck(generated_deck, pitch_deck_slides)
+        deck_markdown = _deck_markdown_from_slides(active_slides)
         deck_document_type = "pitch_deck"
         deck_document_name = "Pitch Deck"
 
+    generated_deck_response = None if uploaded_deck_text and not generated_deck else _slides_for_response(active_slides)
+    pptx_slides = _slides_for_pptx(active_slides)
+    presentation_script = _ensure_pitch_deck_script(
+        content=presentation_script_override,
+        company_name=profile.company_name,
+        grant_title=grant.title,
+        provider_name=grant.provider_name,
+        slides=None if uploaded_deck_text else active_slides,
+        fallback_context=uploaded_deck_text,
+    )
+    drafter_metadata["deck_slide_count"] = len(active_slides)
+    pitch_deck_content = build_pitch_deck_pptx_from_slides(pptx_slides)
+    pitch_deck_document = _store_generated_pptx(
+        db=db,
+        user_id=user_id,
+        grant_id=grant_id,
+        filename=f"{_slug(profile.company_name)}_{_slug(grant.title)}_pitch_deck.pptx",
+        content=pitch_deck_content,
+        layout_plan={"slides": pptx_slides},
+        generation_mode=str(drafter_metadata["agent_mode"]),
+    )
+
     generated_documents = [
-        _store_generated_markdown(
+        _store_generated_pdf(
             db,
             user_id,
             grant_id,
@@ -700,9 +1511,9 @@ def draft_application_bundle(
             "business_proposal",
             "Business Proposal",
             business_proposal,
-            {"bundle": "drafter"},
+            drafter_metadata,
         ),
-        _store_generated_markdown(
+        _store_generated_text(
             db,
             user_id,
             grant_id,
@@ -710,8 +1521,9 @@ def draft_application_bundle(
             "presentation_script",
             "Presentation Script",
             presentation_script,
-            {"bundle": "drafter"},
+            drafter_metadata,
         ),
+        pitch_deck_document,
         _store_generated_markdown(
             db,
             user_id,
@@ -720,14 +1532,14 @@ def draft_application_bundle(
             deck_document_type,
             deck_document_name,
             deck_markdown,
-            {"bundle": "drafter"},
+            drafter_metadata,
         ),
     ]
 
     return {
         "business_proposal_markdown": business_proposal,
         "presentation_script_markdown": presentation_script,
-        "generated_deck": generated_deck,
+        "generated_deck": generated_deck_response,
         "deck_critique": deck_critique,
         "generated_documents": generated_documents,
     }
@@ -775,10 +1587,26 @@ async def generate_and_store_application_pitch_deck(
         layout_plan=layout_plan,
         generation_mode=generation_mode,
     )
+    script_content = _build_pitch_deck_script(
+        company_name=profile.company_name,
+        grant_title=grant.title,
+        provider_name=grant.provider_name,
+        slides=layout_plan.get("slides") if isinstance(layout_plan.get("slides"), list) else None,
+    )
+    _store_generated_text(
+        db=db,
+        user_id=user_id,
+        grant_id=grant_id,
+        grant_title=grant.title,
+        document_type="presentation_script",
+        document_name="Pitch Deck Script",
+        content=script_content,
+        extra_metadata={"companion_document_id": document.id, "bundle": "pitch_deck"},
+    )
     return {
         "document": _generated_file_summary(document),
         "download_url": f"/grants/{grant_id}/application/{user_id}/documents/{document.id}/download",
-        "message": "Pitch deck generated by Drafter Agent and stored in the user document database.",
+        "message": "Pitch deck and companion script generated by Drafter Agent and stored in the user document database.",
         "layout_plan": layout_plan,
     }
 
@@ -825,16 +1653,20 @@ def download_application_document(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
 
-    generated_pptx = _pptx_bytes_from_document(document)
-    if generated_pptx:
-        return _pptx_response(generated_pptx, document.file_name)
+    generated_binary = _binary_bytes_from_document(document)
+    if generated_binary:
+        content, content_type = generated_binary
+        return _bytes_response(content, content_type, document.file_name)
 
     generated_content = document.metadata_json.get("content_markdown")
     if generated_content:
         buffer = io.BytesIO(generated_content.encode("utf-8"))
+        content_type = document.metadata_json.get("content_type") or (
+            TEXT_MIME if document.file_name.lower().endswith(".txt") else "text/markdown"
+        )
         return StreamingResponse(
             buffer,
-            media_type="text/markdown",
+            media_type=content_type,
             headers={"Content-Disposition": f'attachment; filename="{document.file_name}"'},
         )
 
@@ -902,12 +1734,13 @@ def download_submission_package(grant_id: int, user_id: int, db: Session = Depen
                     f"- Target grant amount: RM {profile.target_grant_amount or 'not specified'}\n\n"
                     f"{profile.summary or ''}\n"
                 ),
-            )
+        )
         uploaded_manifest = []
         for document in package_documents:
-            generated_pptx = _pptx_bytes_from_document(document)
-            if generated_pptx:
-                archive.writestr(f"generated/{document.file_name}", generated_pptx)
+            generated_binary = _binary_bytes_from_document(document)
+            if generated_binary:
+                content, _content_type = generated_binary
+                archive.writestr(f"generated/{document.file_name}", content)
                 continue
             generated_content = document.metadata_json.get("content_markdown")
             if generated_content:
@@ -921,7 +1754,7 @@ def download_submission_package(grant_id: int, user_id: int, db: Session = Depen
                         "file_url": document.file_url,
                         "status": document.status,
                     }
-                )
+        )
         archive.writestr("uploaded_documents_manifest.json", json.dumps(uploaded_manifest, ensure_ascii=True, indent=2))
 
     buffer.seek(0)

@@ -15,10 +15,10 @@ SLIDE_CX = 12192000
 SLIDE_CY = 6858000
 LAYOUTS = {"hero", "split", "metrics", "timeline", "cards", "closing"}
 
-CREATIVE_DECK_SYSTEM_PROMPT = """You design concise grant pitch decks for Malaysian SMEs.
+CREATIVE_DECK_SYSTEM_PROMPT = """You design evidence-rich grant pitch decks for Malaysian SMEs.
 Return compact JSON only:
-{"slides":[{"title":"","subtitle":"","layout":"hero|split|metrics|timeline|cards|closing","accent_color":"0087A5","bullets":[""],"metrics":[{"label":"","value":""}]}]}
-Rules: 6 slides max, 3 bullets max per slide, 3 metrics max per slide, no Markdown, no external assets, professional government-grant style."""
+{"slides":[{"title":"","subtitle":"","layout":"hero|split|metrics|timeline|cards|closing","accent_color":"0087A5","bullets":[""],"metrics":[{"label":"","value":""}],"grant_alignment":"","speaker_notes":""}]}
+Rules: 8 slides max, 4-5 specific bullets per slide, 3 metrics max per slide, no Markdown, no external assets, professional government-grant style. Use available facts, funding figures, eligibility evidence, use of funds, timeline, KPIs, risks, and closing request. Do not invent traction or partners."""
 
 
 def build_pitch_deck_slides(
@@ -33,68 +33,173 @@ def build_pitch_deck_slides(
     employees = _text(sme_profile, "full_time_employees", "employee_count", "not specified")
     age = _text(sme_profile, "age_in_months", "not specified")
     ownership = _text(sme_profile, "ownership_majority", "nationality", "not specified")
-    project_cost = _money(_value(sme_profile, "total_project_cost_rm", "project_cost_rm"))
-    funding = _money(_value(sme_profile, "requested_funding_rm", "target_grant_amount"))
-    outsourced = _money(_value(sme_profile, "outsourced_cost_rm"))
+    project_cost_value = _value(sme_profile, "total_project_cost_rm", "project_cost_rm")
+    funding_value = _value(sme_profile, "requested_funding_rm", "target_grant_amount")
+    outsourced_value = _value(sme_profile, "outsourced_cost_rm")
+    project_cost = _money(project_cost_value)
+    funding = _money(funding_value)
+    outsourced = _money(outsourced_value)
+    grant_cap = _money(_value(grant_context, "amount_max", "max_funding_rm"))
+    funding_share = _percentage(funding_value, project_cost_value)
+    outsourcing_share = _percentage(outsourced_value, project_cost_value)
     partner = "Confirmed" if bool(_value(sme_profile, "has_end_user_partner")) else "To be confirmed"
     summary = _text(sme_profile, "summary", "Local SME seeking growth funding.")
+    deadline = _text(grant_context, "application_deadline", "to be confirmed")
+    grant_description = _text(
+        grant_context,
+        "description",
+        "Grant support for eligible Malaysian SME growth, capability-building, or commercialisation projects.",
+    )
+    eligibility = _text(
+        grant_context,
+        "eligibility_notes",
+        "Eligibility should be confirmed against the latest provider criteria before submission.",
+    )
+    mandatory_documents = _list_text(_value(grant_context, "mandatory_documents", "documents_required"))
+    profile_documents = _list_text(_value(sme_profile, "documents_provided"))
+    documents = mandatory_documents or profile_documents
+    document_count = len(documents)
+    document_summary = _clip(", ".join(documents[:4]) + ("..." if len(documents) > 4 else ""), 118) or "Required documents to be confirmed"
 
     return [
         {
             "title": f"{company}",
-            "subtitle": f"{grant_name} pitch deck",
-            "bullets": [f"Prepared for {provider}", f"Sector: {sector}", f"Funding request: {funding}"],
+            "subtitle": f"{grant_name} application pitch deck",
+            "layout": "hero",
+            "accent_color": "0087A5",
+            "bullets": [
+                f"Prepared for {provider} with a focused funding request of {funding}.",
+                f"Total project cost is {project_cost}; requested support represents {funding_share} of the project.",
+                f"Sector focus: {sector}; submission deadline: {deadline}.",
+                "Deck narrative is aligned to the proposal, application checklist, and supporting evidence.",
+            ],
+            "metrics": [
+                {"label": "Funding Request", "value": funding},
+                {"label": "Project Cost", "value": project_cost},
+                {"label": "Grant Cap", "value": grant_cap},
+            ],
+            "grant_alignment": f"Frames the applicant and funding ask for {grant_name}.",
+            "speaker_notes": f"Open by naming {company}, the target grant, the requested amount, and why the project is ready for assessment.",
         },
         {
             "title": "Company Snapshot",
-            "bullets": [
-                f"{company} operates in {sector}.",
-                f"Team size: {employees} full-time employees.",
-                f"Operating history: {age} months.",
-                f"Ownership / nationality: {ownership}.",
-            ],
-        },
-        {
-            "title": "Project Need",
+            "subtitle": "Eligibility and operating profile",
+            "layout": "split",
+            "accent_color": "494BD6",
             "bullets": [
                 _clip(summary, 130),
-                "The project targets a practical business growth or digitalisation gap.",
-                "Grant support reduces execution risk and accelerates measurable delivery.",
+                f"{company} operates in {sector} with {employees} full-time employee(s).",
+                f"Operating history is {age} months with ownership or nationality recorded as {ownership}.",
+                f"End-user partner status: {partner}; use this as a readiness signal during review.",
+                f"Key application documents: {document_summary}.",
             ],
+            "metrics": [
+                {"label": "Operating History", "value": f"{age} months"},
+                {"label": "Ownership / Nationality", "value": ownership},
+                {"label": "Team Size", "value": str(employees)},
+            ],
+            "grant_alignment": "Shows the reviewer the company facts needed for first-pass eligibility screening.",
+            "speaker_notes": "Use this slide to establish credibility before discussing the project. Keep the profile factual and point reviewers to stored documents.",
         },
         {
-            "title": "Proposed Solution",
+            "title": "Problem And Opportunity",
+            "subtitle": "Why the project deserves support now",
+            "layout": "cards",
+            "accent_color": "00A676",
             "bullets": [
-                f"Build and scale a focused solution within {sector}.",
-                "Prioritise internal capability, repeatable delivery, and accountable milestones.",
+                _clip(grant_description, 128),
+                "The project addresses a practical gap in capacity, delivery quality, validation, or market readiness.",
+                "Without co-funding, the company may need to slow implementation, reduce scope, or defer validation work.",
+                f"The opportunity is to convert {sector} capability into a more evidence-ready commercial project.",
+            ],
+            "grant_alignment": f"Connects the business need to the public funding purpose of {grant_name}.",
+            "speaker_notes": "Explain the pain point in plain business terms, then tie it to the grant provider's expected impact.",
+        },
+        {
+            "title": "Solution And Differentiation",
+            "subtitle": "A focused implementation plan",
+            "layout": "split",
+            "accent_color": "E09F3E",
+            "bullets": [
+                f"Build or enhance a focused {sector} solution tied to the funded project scope.",
+                "Prioritise internal capability, accountable owners, milestone evidence, and controlled supplier delivery.",
+                "Use validation activity to prove the solution works for target users before wider commercial scaling.",
                 f"End-user partner status: {partner}.",
             ],
-        },
-        {
-            "title": "Budget And Funding Ask",
-            "bullets": [
-                f"Total project cost: {project_cost}.",
-                f"Grant funding requested: {funding}.",
-                f"Outsourced cost: {outsourced}.",
-                "Funds will be used for project execution, validation, and go-to-market readiness.",
+            "metrics": [
+                {"label": "Internal Team", "value": str(employees)},
+                {"label": "Partner Status", "value": partner},
             ],
+            "grant_alignment": "Shows how the proposed activity turns funding into a concrete implementation project.",
+            "speaker_notes": "Describe what will actually be built or improved, how it is differentiated, and how the team will prove delivery.",
         },
         {
             "title": "Grant Alignment",
+            "subtitle": "How the application maps to review criteria",
+            "layout": "metrics",
+            "accent_color": "0087A5",
             "bullets": [
-                f"Aligned to {grant_name} by {provider}.",
-                f"Relevant sector focus: {sector}.",
-                "Company profile and required documents support eligibility review.",
-                "Manual portal submission remains under the founder's control.",
+                _clip(eligibility, 128),
+                f"Funding ask of {funding} is assessed against grant cap of {grant_cap}.",
+                f"Sector and nationality fit should be reviewed as {sector} and {ownership}.",
+                f"Mandatory documents tracked for this grant: {document_summary}.",
+                "Proposal, deck, and script should use the same figures and claims.",
             ],
+            "metrics": [
+                {"label": "Documents Tracked", "value": str(document_count)},
+                {"label": "Funding Ask", "value": funding},
+                {"label": "Grant Cap", "value": grant_cap},
+            ],
+            "grant_alignment": "Makes the evaluator's checklist visible inside the pitch deck.",
+            "speaker_notes": "Walk reviewers through fit signals and call out any items still marked to be confirmed.",
         },
         {
-            "title": "Closing Request",
+            "title": "Use Of Funds",
+            "subtitle": "Budget logic and governance",
+            "layout": "split",
+            "accent_color": "494BD6",
             "bullets": [
-                f"{company} is requesting {funding} to execute this project.",
-                "The team is ready to deliver a focused, measurable grant-funded outcome.",
-                "Thank you for considering this application.",
+                f"Requested funding: {funding}; total project cost: {project_cost}; funding share: {funding_share}.",
+                "Allocate funds to delivery work packages, validation, commercial readiness, and reporting evidence.",
+                f"Outsourced cost is {outsourced}, representing {outsourcing_share} of total project cost where data is available.",
+                "Maintain procurement records, claims evidence, budget tracking, and milestone approvals for audit readiness.",
             ],
+            "metrics": [
+                {"label": "Funding Share", "value": funding_share},
+                {"label": "Outsourcing", "value": outsourced},
+                {"label": "Outsource Share", "value": outsourcing_share},
+            ],
+            "grant_alignment": "Shows the funding request is controlled, auditable, and tied to eligible outcomes.",
+            "speaker_notes": "This is the finance confidence slide. Say how the funds will be governed, not only what they will buy.",
+        },
+        {
+            "title": "Timeline And KPIs",
+            "subtitle": "Milestone-based execution",
+            "layout": "timeline",
+            "accent_color": "00A676",
+            "bullets": [
+                "Month 1: finalize scope, internal owners, vendor checks, and evidence checklist.",
+                "Months 2-3: execute main delivery work packages and capture milestone proof.",
+                "Month 4: validate outcomes, reconcile spend, prepare reporting pack, and close audit gaps.",
+                "KPIs: milestone completion, evidence readiness, budget control, delivery quality, and adoption path.",
+            ],
+            "grant_alignment": "Gives the panel a practical delivery path for post-award monitoring.",
+            "speaker_notes": "Present this as a commitment plan. Mention who owns tracking and how the team will know each milestone is complete.",
+        },
+        {
+            "title": "Outcomes And Closing Request",
+            "subtitle": "Decision-ready summary",
+            "layout": "closing",
+            "accent_color": "494BD6",
+            "bullets": [
+                f"Aligned to {grant_name} by {provider}.",
+                f"{company} is requesting {funding} to deliver measurable, evidence-backed project outcomes.",
+                "Expected benefits include stronger capability, clearer market readiness, and improved delivery confidence.",
+                "Key risks are document delay, supplier delivery, budget variance, and weak evidence; mitigations are built into governance.",
+                "Closing ask: approve support subject to final document verification and provider assessment.",
+            ],
+            "grant_alignment": "Ends with the award decision the panel is being asked to make.",
+            "speaker_notes": "Close with confidence, restate the amount requested, and invite questions on eligibility, budget, milestones, or evidence.",
         },
     ]
 
@@ -123,7 +228,7 @@ async def generate_creative_deck_plan(
     grant_context: Mapping[str, Any] | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
-    from ai_sandbox.glm_client import GLMClient
+    from .glm_client import GLMClient
 
     payload = {
         "profile": _compact_profile(sme_profile),
@@ -159,9 +264,12 @@ def save_pitch_deck_pptx(
 def _compact_profile(sme_profile: Mapping[str, Any]) -> dict[str, Any]:
     keys = [
         "company_name",
+        "ssm_number",
         "sector",
         "industry",
         "summary",
+        "business_stage",
+        "annual_revenue",
         "age_in_months",
         "full_time_employees",
         "employee_count",
@@ -172,6 +280,7 @@ def _compact_profile(sme_profile: Mapping[str, Any]) -> dict[str, Any]:
         "target_grant_amount",
         "outsourced_cost_rm",
         "has_end_user_partner",
+        "documents_provided",
     ]
     return _compact_dict(sme_profile, keys, max_text=180)
 
@@ -182,12 +291,19 @@ def _compact_grant(grant_context: Mapping[str, Any]) -> dict[str, Any]:
         "title",
         "provider_name",
         "provider",
+        "description",
+        "eligibility_notes",
         "industry",
         "nationality",
+        "amount_min",
         "amount_max",
+        "max_funding_rm",
         "application_deadline",
+        "mandatory_documents",
+        "requirements",
+        "application_roadmap",
     ]
-    return _compact_dict(grant_context, keys, max_text=120)
+    return _compact_dict(grant_context, keys, max_text=180)
 
 
 def _compact_dict(source: Mapping[str, Any], keys: list[str], max_text: int) -> dict[str, Any]:
@@ -206,15 +322,15 @@ def _normalize_ai_slides(plan: Mapping[str, Any], fallback_slides: list[dict[str
         return fallback_slides
 
     slides = []
-    for index, raw in enumerate(raw_slides[:6], start=1):
+    for index, raw in enumerate(raw_slides[:8], start=1):
         if not isinstance(raw, Mapping):
             continue
         title = _clip(str(raw.get("title") or f"Slide {index}"), 58)
         bullets = [
-            _clip(str(item), 115)
+            _clip(str(item), 135)
             for item in raw.get("bullets", [])
             if item not in (None, "")
-        ][:3]
+        ][:5]
         metrics = []
         for metric in raw.get("metrics", [])[:3]:
             if not isinstance(metric, Mapping):
@@ -231,12 +347,18 @@ def _normalize_ai_slides(plan: Mapping[str, Any], fallback_slides: list[dict[str
                 "subtitle": _clip(str(raw.get("subtitle") or ""), 82),
                 "layout": raw.get("layout") if raw.get("layout") in LAYOUTS else "split",
                 "accent_color": _safe_color(raw.get("accent_color"), None),
-                "bullets": bullets or fallback_slides[min(index - 1, len(fallback_slides) - 1)]["bullets"][:3],
+                "bullets": bullets or fallback_slides[min(index - 1, len(fallback_slides) - 1)]["bullets"][:5],
                 "metrics": metrics,
+                "grant_alignment": _clip(str(raw.get("grant_alignment") or ""), 160),
+                "speaker_notes": _clip(str(raw.get("speaker_notes") or ""), 320),
             }
         )
 
-    return slides or fallback_slides
+    if not slides:
+        return fallback_slides
+    if len(slides) < len(fallback_slides):
+        slides.extend(fallback_slides[len(slides) : 8])
+    return slides
 
 
 def _text(source: Mapping[str, Any], *keys_and_default: str) -> str:
@@ -261,6 +383,37 @@ def _money(value: Any) -> str:
         return f"RM {float(value):,.0f}"
     except (TypeError, ValueError):
         return "RM not specified"
+
+
+def _percentage(part: Any, total: Any) -> str:
+    try:
+        total_float = float(total)
+        if total_float <= 0:
+            return "not specified"
+        return f"{(float(part) / total_float) * 100:.0f}%"
+    except (TypeError, ValueError):
+        return "not specified"
+
+
+def _list_text(value: Any) -> list[str]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, str):
+        return [value]
+    if not isinstance(value, (list, tuple, set)):
+        return [str(value)]
+
+    items: list[str] = []
+    for item in value:
+        if item in (None, "", [], {}):
+            continue
+        if isinstance(item, Mapping):
+            text = item.get("name") or item.get("title") or item.get("document_type") or item.get("description")
+            if text not in (None, "", [], {}):
+                items.append(str(text))
+            continue
+        items.append(str(item))
+    return items
 
 
 def _clip(value: str, max_chars: int) -> str:
@@ -457,7 +610,7 @@ def _slide_body(
     if layout == "closing":
         return (
             _textbox(2, 1000000, 1500000, 9800000, 1000000, title, 3800, "0A3945", bold=True)
-            + _bullet_box(4, 1650000, 2850000, 8400000, 1700000, bullets[:3], 2400)
+            + _bullet_box(4, 1450000, 2750000, 9000000, 2350000, bullets[:5], 2000)
             + _rect(8, 3600000, 5250000, 4900000, 160000, accent)
         )
 
@@ -511,6 +664,14 @@ def _metric_card(shape_id: int, x: int, y: int, cx: int, cy: int, metric: Mappin
 
 def _timeline(shape_id: int, x: int, y: int, bullets: list[str], accent: str) -> str:
     content = ""
+    if len(bullets) > 3:
+        for index, bullet in enumerate(bullets[:4]):
+            node_x = x + (index % 2) * 5050000
+            node_y = y + (index // 2) * 1450000
+            content += _rect(shape_id + index * 3, node_x, node_y, 4600000, 1200000, "FFFFFF", line_color=accent)
+            content += _textbox(shape_id + index * 3 + 1, node_x + 220000, node_y + 130000, 4100000, 280000, f"Milestone {index + 1}", 1350, accent, bold=True)
+            content += _textbox(shape_id + index * 3 + 2, node_x + 220000, node_y + 500000, 4100000, 520000, bullet, 1450, "263238")
+        return content
     for index, bullet in enumerate(bullets[:3]):
         node_x = x + index * 3400000
         content += _rect(shape_id + index * 3, node_x, y, 2850000, 1650000, "FFFFFF", line_color=accent)
@@ -521,6 +682,14 @@ def _timeline(shape_id: int, x: int, y: int, bullets: list[str], accent: str) ->
 
 def _cards(shape_id: int, x: int, y: int, bullets: list[str], accent: str) -> str:
     content = ""
+    if len(bullets) > 3:
+        for index, bullet in enumerate(bullets[:4]):
+            card_x = x + (index % 2) * 5050000
+            card_y = y + (index // 2) * 1450000
+            content += _rect(shape_id + index * 3, card_x, card_y, 4700000, 1200000, "FFFFFF", line_color="D9E4E8")
+            content += _rect(shape_id + index * 3 + 1, card_x, card_y, 4700000, 140000, accent)
+            content += _textbox(shape_id + index * 3 + 2, card_x + 220000, card_y + 350000, 4200000, 600000, bullet, 1500, "263238")
+        return content
     for index, bullet in enumerate(bullets[:3]):
         card_x = x + index * 3400000
         content += _rect(shape_id + index * 3, card_x, y, 3000000, 2300000, "FFFFFF", line_color="D9E4E8")

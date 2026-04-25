@@ -3,8 +3,9 @@
 import React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
+import { createBackendSession } from "@/services/grantlySession";
 import styles from "./page.module.css";
 
 function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
@@ -14,17 +15,16 @@ function MI({ name, size = 24, color }: { name: string; size?: number; color?: s
 export default function LoginPage() {
   const [width, setWidth] = React.useState(1200);
   React.useEffect(() => {
-    const u = () => setWidth(window.innerWidth);
-    u();
-    window.addEventListener("resize", u);
-    return () => window.removeEventListener("resize", u);
+    const update = () => setWidth(window.innerWidth);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
   const isWide = width >= 1024;
 
   return (
     <div className={styles.root}>
-      {/* background */}
       <div className={styles.bgWrap}>
         {isWide && (
           <div className={styles.leftBg}>
@@ -45,13 +45,11 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* back button */}
       <Link href="/" className={styles.backBtn}>
         <MI name="arrow_back" size={18} color="#006780" />
         <span>Return to Home</span>
       </Link>
 
-      {/* content */}
       <div className={styles.content}>
         <div className={styles.inner}>
           {isWide && <LeftPane />}
@@ -85,32 +83,84 @@ function LeftPane() {
 
 function LoginCard() {
   const [rememberMe, setRememberMe] = React.useState(false);
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
   const [googleLoading, setGoogleLoading] = React.useState(false);
-  const [googleError, setGoogleError] = React.useState("");
+  const [error, setError] = React.useState("");
   const router = useRouter();
+
+  const authErrorMessage = (err: unknown): string => {
+    const code = typeof err === "object" && err !== null && "code" in err ? String((err as { code?: string }).code) : "";
+    if (code.includes("auth/invalid-credential") || code.includes("auth/wrong-password") || code.includes("auth/user-not-found")) {
+      return "Email or password is incorrect.";
+    }
+    if (code.includes("auth/invalid-email")) return "Enter a valid email address.";
+    if (code.includes("auth/too-many-requests")) return "Too many attempts. Please wait a moment and try again.";
+    if (code.includes("auth/operation-not-allowed")) return "Email/password login is not enabled for this Firebase project.";
+    return err instanceof Error ? err.message : "Unable to sign in. Please try again.";
+  };
+
+  const handleEmailSignIn = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!email.trim()) {
+      setError("Enter your email address to open the workspace.");
+      return;
+    }
+    if (!password) {
+      setError("Enter your password to open the workspace.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (!credential.user.email) {
+        throw new Error("Firebase did not return an email address for this account.");
+      }
+      await createBackendSession({
+        email: credential.user.email,
+        displayName: credential.user.displayName || credential.user.email.split("@")[0],
+        externalAuthId: credential.user.uid,
+      });
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setError(authErrorMessage(err));
+      setLoading(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    setGoogleError("");
+    setError("");
     try {
-      await signInWithPopup(auth, googleProvider);
+      const credential = await signInWithPopup(auth, googleProvider);
+      if (!credential.user.email) {
+        throw new Error("Google did not return an email address for this account.");
+      }
+      await createBackendSession({
+        email: credential.user.email,
+        displayName: credential.user.displayName,
+        externalAuthId: credential.user.uid,
+      });
       router.push("/dashboard");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Google sign-in failed. Please try again.";
-      setGoogleError(message);
+      setError(message);
       setGoogleLoading(false);
     }
   };
 
   return (
-    <div className={`${styles.loginCard} glass-strong`}>
+    <form className={`${styles.loginCard} glass-strong`} onSubmit={handleEmailSignIn}>
       <h2 className={styles.cardTitle}>Grantly</h2>
       <p className={styles.cardSub}>Enter your credentials to access the workspace.</p>
       <div style={{ height: 24 }} />
 
-      <GhostField label="EMAIL ADDRESS" hint="jane@example.com" />
+      <GhostField label="EMAIL ADDRESS" hint="jane@example.com" value={email} onChange={setEmail} />
       <div style={{ height: 16 }} />
-      <GhostField label="PASSWORD" hint="••••••••" forgotText="Forgot?" obscure />
+      <GhostField label="PASSWORD" hint="Password" value={password} onChange={setPassword} forgotText="Forgot?" obscure />
       <div style={{ height: 16 }} />
 
       <label className={styles.remember}>
@@ -119,9 +169,20 @@ function LoginCard() {
       </label>
       <div style={{ height: 20 }} />
 
-      <Link href="/dashboard" className="btn-gradient" style={{ height: 48, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        Access Workspace
-      </Link>
+      {error && (
+        <div style={{ background: "#fff0f0", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#BA1A1A" }}>
+          {error}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={loading || googleLoading}
+        className="btn-gradient"
+        style={{ height: 48, width: "100%", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: loading ? "wait" : "pointer", opacity: loading ? 0.72 : 1 }}
+      >
+        {loading ? "Opening Workspace..." : "Access Workspace"}
+      </button>
       <div style={{ height: 24 }} />
 
       <div className={styles.dividerRow}>
@@ -131,15 +192,10 @@ function LoginCard() {
       </div>
       <div style={{ height: 24 }} />
 
-      {googleError && (
-        <div style={{ background: "#fff0f0", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#BA1A1A" }}>
-          {googleError}
-        </div>
-      )}
-
       <button
+        type="button"
         onClick={handleGoogleSignIn}
-        disabled={googleLoading}
+        disabled={googleLoading || loading}
         className={styles.googleBtn}
         style={{ width: "100%", border: "none", cursor: googleLoading ? "wait" : "pointer", opacity: googleLoading ? 0.7 : 1 }}
       >
@@ -158,18 +214,32 @@ function LoginCard() {
         )}
       </button>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </form>
   );
 }
 
-function GhostField({ label, hint, forgotText, obscure }: { label: string; hint: string; forgotText?: string; obscure?: boolean }) {
+function GhostField({
+  label,
+  hint,
+  forgotText,
+  obscure,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  forgotText?: string;
+  obscure?: boolean;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
     <div className="ghost-field">
       <div className={styles.fieldHeader}>
         <label>{label}</label>
-        {forgotText && <button className={styles.forgotBtn}>{forgotText}</button>}
+        {forgotText && <button type="button" className={styles.forgotBtn}>{forgotText}</button>}
       </div>
-      <input type={obscure ? "password" : "text"} placeholder={hint} />
+      <input type={obscure ? "password" : "email"} placeholder={hint} value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
@@ -177,7 +247,7 @@ function GhostField({ label, hint, forgotText, obscure }: { label: string; hint:
 function RegisterLink() {
   return (
     <Link href="/initialize" className={styles.registerLink}>
-      <span>Register for Node Initialization</span>
+      <span>New user? Register now.</span>
       <MI name="arrow_forward" size={16} color="#904D00" />
     </Link>
   );

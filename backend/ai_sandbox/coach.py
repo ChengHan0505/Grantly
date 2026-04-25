@@ -11,8 +11,12 @@ from __future__ import annotations
 import asyncio
 import json
 
-from glm_client import GLMClient
-from schemas import CoachOutput, EvaluatorOutput, EvidenceTrace
+try:
+    from .glm_client import GLMClient
+    from .schemas import CoachOutput, EvaluatorOutput, EvidenceTrace
+except ImportError:  # pragma: no cover - supports direct script execution
+    from glm_client import GLMClient
+    from schemas import CoachOutput, EvaluatorOutput, EvidenceTrace
 
 
 COACH_SYSTEM_PROMPT_TEMPLATE = """You are a supportive Startup Coach for Malaysian SMEs.

@@ -11,8 +11,12 @@ from __future__ import annotations
 import asyncio
 import json
 
-from glm_client import GLMClient
-from schemas import EvaluatorOutput, GrantRequirement, SMEProfile
+try:
+    from .glm_client import GLMClient
+    from .schemas import EvaluatorOutput, GrantRequirement, SMEProfile
+except ImportError:  # pragma: no cover - supports direct script execution
+    from glm_client import GLMClient
+    from schemas import EvaluatorOutput, GrantRequirement, SMEProfile
 
 
 EVALUATOR_SYSTEM_PROMPT_TEMPLATE = """You are an expert Malaysian Grant Auditor for the Malaysia SME Grant Copilot.

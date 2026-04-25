@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.ai_sandbox.extractor import run_document_extractor
 from backend.src.api.schemas import (
     CompanyProfileGenerationRead,
     CompanyProfileGenerationRequest,
@@ -13,8 +14,18 @@ from backend.src.api.schemas import (
     SystemStateRead,
     UserCreate,
     UserRead,
+    WorkspaceRead,
 )
-from backend.src.database.db import create_user, get_company_documents, get_company_profile, get_db, get_user_by_id, upsert_company_profile
+from backend.src.database.db import (
+    create_user,
+    get_company_documents,
+    get_db,
+    get_user_by_id,
+    list_grants,
+    rank_grants_for_user,
+    refresh_company_profile_readiness,
+    upsert_company_profile,
+)
 from backend.src.database.models import SystemState, User
 
 
@@ -73,9 +84,9 @@ def _business_stage_from_age(age_in_months: int | float | str | None) -> str | N
     return "established"
 
 
-def _build_profile_payload(payload: CompanyProfileGenerationRequest) -> tuple[dict, list[dict]]:
+def _build_profile_payload(payload: CompanyProfileGenerationRequest, agent_profile: dict[str, Any] | None = None) -> tuple[dict, list[dict]]:
     extractor_profile = payload.extractor_profile.model_dump(exclude_none=True) if payload.extractor_profile else {}
-    extracted_data = {**payload.extracted_data, **extractor_profile}
+    extracted_data = {**(agent_profile or {}), **payload.extracted_data, **extractor_profile}
     questionnaire = payload.questionnaire_answers
 
     ownership = _pick_value(extracted_data, questionnaire, "ownership_majority", "nationality")
@@ -124,6 +135,41 @@ def _build_profile_payload(payload: CompanyProfileGenerationRequest) -> tuple[di
     return profile_payload, documents
 
 
+def _document_evidence_text(payload: CompanyProfileGenerationRequest, document_type: str) -> str:
+    chunks: list[str] = []
+    for document in payload.documents:
+        if document.document_type.lower() != document_type:
+            continue
+        chunks.append(f"Document type: {document.document_type}")
+        chunks.append(f"File name: {document.file_name}")
+        metadata = document.metadata or {}
+        for key in ("extracted_text", "text", "raw_text", "preview_text"):
+            value = metadata.get(key)
+            if isinstance(value, str) and value.strip():
+                chunks.append(value[:12000])
+    return "\n\n".join(chunks)
+
+
+async def _extract_profile_with_agent(payload: CompanyProfileGenerationRequest) -> dict[str, Any]:
+    documents = [document.model_dump() for document in payload.documents]
+    context = {
+        **payload.questionnaire_answers,
+        **payload.extracted_data,
+        "raw_text": payload.raw_text,
+        "extractor_profile": payload.extractor_profile.model_dump(exclude_none=True) if payload.extractor_profile else {},
+    }
+    try:
+        profile = await run_document_extractor(
+            ssm_text=_document_evidence_text(payload, "ssm"),
+            financial_statement_text=_document_evidence_text(payload, "financial_statement"),
+            context=context,
+            documents=documents,
+        )
+        return profile.model_dump()
+    except Exception as exc:  # noqa: BLE001
+        return {"extractor_agent_error": str(exc)[:300]}
+
+
 # Register new user
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def register_user(payload: UserCreate, db: Session = Depends(get_db)):
@@ -145,6 +191,28 @@ def register_user(payload: UserCreate, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/lookup", response_model=UserRead)
+def lookup_user(
+    email: str | None = None,
+    external_auth_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if not email and not external_auth_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="email or external_auth_id is required.")
+
+    query = db.query(User)
+    if external_auth_id:
+        user = query.filter(User.external_auth_id == external_auth_id).first()
+        if user is not None:
+            return user
+    if email:
+        user = query.filter(User.email == email).first()
+        if user is not None:
+            return user
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+
 # Save company profile
 @router.get("/{user_id}", response_model=UserRead)
 def get_user(user_id: int, db: Session = Depends(get_db)):
@@ -152,6 +220,21 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     return user
+
+
+@router.get("/{user_id}/workspace", response_model=WorkspaceRead)
+def read_user_workspace(user_id: int, db: Session = Depends(get_db)):
+    user = get_user_by_id(db, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    profile = refresh_company_profile_readiness(db, user_id)
+    return {
+        "user": user,
+        "profile": profile,
+        "documents": get_company_documents(db, user_id),
+        "ranked_grants": rank_grants_for_user(db, user_id),
+        "grants": list_grants(db, include_all=True),
+    }
 
 
 # To get company documents
@@ -171,7 +254,7 @@ def save_company_profile(user_id: int, payload: CompanyProfileUpsert, db: Sessio
 
 
 @router.post("/{user_id}/company-profile/extract", response_model=CompanyProfileGenerationRead)
-def generate_company_profile(
+async def generate_company_profile(
     user_id: int,
     payload: CompanyProfileGenerationRequest,
     db: Session = Depends(get_db),
@@ -180,7 +263,8 @@ def generate_company_profile(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
-    profile_payload, documents = _build_profile_payload(payload)
+    agent_profile = await _extract_profile_with_agent(payload)
+    profile_payload, documents = _build_profile_payload(payload, agent_profile)
     profile = upsert_company_profile(
         db=db,
         user_id=user_id,
@@ -201,7 +285,7 @@ def generate_company_profile(
 
 @router.get("/{user_id}/company-profile", response_model=CompanyProfileRead)
 def read_company_profile(user_id: int, db: Session = Depends(get_db)):
-    profile = get_company_profile(db, user_id)
+    profile = refresh_company_profile_readiness(db, user_id)
     if profile is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company profile not found.")
     return profile

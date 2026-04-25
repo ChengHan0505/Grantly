@@ -13,6 +13,7 @@ import logging
 import os
 import random
 import re
+from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
@@ -28,6 +29,8 @@ _RETRYABLE_STATUS_CODES = {502, 503, 504}
 
 DEFAULT_MODEL = "ilmu-glm-5.1"
 ILMU_BASE_URL = "https://api.ilmu.ai/v1"
+PROJECT_DIR = Path(__file__).resolve().parents[2]
+BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 _JSON_FENCE_RE = re.compile(
     r"^\s*```(?:json)?\s*(?P<body>.*?)\s*```\s*$",
@@ -45,9 +48,10 @@ class GLMClient:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = DEFAULT_MODEL,
+        model: str | None = None,
     ) -> None:
-        load_dotenv()
+        load_dotenv(PROJECT_DIR / ".env")
+        load_dotenv(BACKEND_DIR / ".env", override=False)
         resolved_key = api_key or os.getenv("ZAI_API_KEY")
         if not resolved_key:
             raise ValueError(
@@ -55,8 +59,8 @@ class GLMClient:
             )
 
         self.api_key = resolved_key
-        self.model = model
-        self.client = ZhipuAI(api_key=self.api_key, base_url=ILMU_BASE_URL)
+        self.model = model or os.getenv("ZAI_MODEL") or os.getenv("GLM_MODEL") or DEFAULT_MODEL
+        self.client = ZhipuAI(api_key=self.api_key, base_url=ILMU_BASE_URL, timeout=20.0, max_retries=0)
 
     async def generate_json(
         self,

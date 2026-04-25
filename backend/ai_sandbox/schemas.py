@@ -68,10 +68,19 @@ class CoachOutput(BaseModel):
     next_steps: List[ActionStep]
 
 
+class DeckMetric(BaseModel):
+    label: str
+    value: str | int | float
+
+
 class DeckSlide(BaseModel):
     slide_number: int
     title: str
+    subtitle: str | None = None
     bullet_points: List[str]
+    metrics: List[DeckMetric] = Field(default_factory=list)
+    grant_alignment: str | None = None
+    speaker_notes: str | None = None
 
 
 class DeckCritique(BaseModel):

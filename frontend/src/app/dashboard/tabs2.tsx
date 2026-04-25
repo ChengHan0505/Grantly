@@ -1,19 +1,86 @@
 "use client";
 import React from "react";
+import { updateCompanyProfile, type CompanyProfileRead, type DocumentRead, type RankedGrantRead, type UserRead } from "@/services/grantlyApi";
 import s from "./page.module.css";
 
 function MI({name,size=24,color}:{name:string;size?:number;color?:string}){
   return <span className="material-icon" style={{fontSize:size,color}}>{name}</span>;
 }
 
-export function CompanyTab(){
+export function CompanyTab({
+  currentUser,
+  profile,
+  documents = [],
+  onRefresh,
+}: {
+  currentUser?: UserRead | null;
+  profile?: CompanyProfileRead | null;
+  documents?: DocumentRead[];
+  onRefresh?: () => Promise<void>;
+}) {
   const [isEditing, setIsEditing] = React.useState(false);
-  const [name, setName] = React.useState("Nexus Dynamics Sdn Bhd");
-  const [vertical, setVertical] = React.useState("Information & Communication Tech (ICT)");
-  const [stage, setStage] = React.useState("Early Stage / MVP");
-  const [desc, setDesc] = React.useState("Nexus Dynamics develops AI-driven predictive maintenance software for the manufacturing sector. Our core platform utilizes machine learning algorithms to analyze sensor data from industrial machinery, predicting failures before they occur and minimizing costly downtime.");
-  const [prob, setProb] = React.useState("Unplanned equipment downtime costs the global manufacturing industry an estimated $50 billion annually. Current preventative maintenance schedules are often inefficient, replacing parts prematurely or failing to catch irregular faults.");
+  const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState("");
+  const [name, setName] = React.useState(profile?.company_name || "Profile not completed");
+  const [vertical, setVertical] = React.useState(profile?.industry || "Industry not set");
+  const [stage, setStage] = React.useState(profile?.business_stage || "Stage not set");
+  const [desc, setDesc] = React.useState(profile?.summary || "Complete Business Fundamentals to store a company narrative in the backend.");
+  const [prob, setProb] = React.useState(String(profile?.questionnaire_answers?.funding_use || "Funding use and problem statement will appear here after onboarding."));
   const [aiModalOpen, setAiModalOpen] = React.useState(false);
+  const readinessScore = Math.round(profile?.readiness_score || 0);
+  const missingHint = documents.length === 0 ? "Upload SSM, financials, or a pitch deck to improve readiness." : `${documents.length} document references are stored in the backend vault.`;
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setName(profile?.company_name || "Profile not completed");
+      setVertical(profile?.industry || "Industry not set");
+      setStage(profile?.business_stage || "Stage not set");
+      setDesc(profile?.summary || "Complete Business Fundamentals to store a company narrative in the backend.");
+      setProb(String(profile?.questionnaire_answers?.funding_use || "Funding use and problem statement will appear here after onboarding."));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [profile]);
+
+  const cleanField = (value: string, placeholder: string): string | null => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === placeholder) return null;
+    return trimmed;
+  };
+
+  const saveProfile = async () => {
+    const companyName = cleanField(name, "Profile not completed");
+    if (!currentUser || !companyName) {
+      setSaveError("Add a company name before saving the profile.");
+      return;
+    }
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      await updateCompanyProfile(currentUser.id, {
+        company_name: companyName,
+        industry: cleanField(vertical, "Industry not set"),
+        nationality: profile?.nationality ?? "Malaysia",
+        annual_revenue: profile?.annual_revenue ?? null,
+        employee_count: profile?.employee_count ?? null,
+        target_grant_amount: profile?.target_grant_amount ?? null,
+        business_stage: cleanField(stage, "Stage not set"),
+        summary: cleanField(desc, "Complete Business Fundamentals to store a company narrative in the backend."),
+        questionnaire_answers: {
+          ...(profile?.questionnaire_answers || {}),
+          funding_use: cleanField(prob, "Funding use and problem statement will appear here after onboarding."),
+        },
+        extracted_data: profile?.extracted_data || {},
+        documents: [],
+      });
+      setIsEditing(false);
+      await onRefresh?.();
+    } catch (error: unknown) {
+      setSaveError(error instanceof Error ? error.message : "Unable to save company profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return <div style={{overflowY:"auto"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:12}}>
@@ -23,13 +90,19 @@ export function CompanyTab(){
       </div>
       {isEditing ? (
         <div style={{display:"flex",gap:8}}>
-          <button className="btn-outline-sm" onClick={() => setIsEditing(false)}>Cancel</button>
-          <button className="btn-primary" onClick={() => setIsEditing(false)}>Save</button>
+          <button className="btn-outline-sm" disabled={saving} onClick={() => setIsEditing(false)}>Cancel</button>
+          <button className="btn-primary" disabled={saving} onClick={saveProfile}>{saving ? "Saving..." : "Save"}</button>
         </div>
       ) : (
         <button className="btn-soft" style={{padding:"6px 12px",fontSize:13}} onClick={() => setIsEditing(true)}><MI name="edit" size={15}/>Edit</button>
       )}
     </div>
+
+    {saveError && (
+      <div style={{background:"#fff0f0",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13,color:"#BA1A1A"}}>
+        {saveError}
+      </div>
+    )}
 
     {/* AI Analysis Top Section */}
     <div className={s.panel} onClick={() => setAiModalOpen(true)} style={{borderRadius:20,padding:"14px 20px",marginBottom:16,background:"linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)",border:"1px solid #bae6fd",cursor:"pointer",transition:"all 0.2s"}}>
@@ -37,10 +110,10 @@ export function CompanyTab(){
         <div style={{position:"relative",width:54,height:54,flexShrink:0}}>
           <svg viewBox="0 0 36 36" style={{width:"100%",height:"100%",transform:"rotate(-90deg)"}}>
             <circle cx="18" cy="18" r="16" fill="transparent" stroke="rgba(0,180,216,0.2)" strokeWidth="4"/>
-            <circle cx="18" cy="18" r="16" fill="transparent" stroke="#00B4D8" strokeWidth="4" strokeDasharray="85 100" strokeDashoffset="0"/>
+            <circle cx="18" cy="18" r="16" fill="transparent" stroke="#00B4D8" strokeWidth="4" strokeDasharray={`${readinessScore} 100`} strokeDashoffset="0"/>
           </svg>
           <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
-            <span style={{fontSize:16,fontWeight:900,color:"#006780",lineHeight:1}}>85</span>
+            <span style={{fontSize:16,fontWeight:900,color:"#006780",lineHeight:1}}>{readinessScore}</span>
           </div>
         </div>
         <div style={{flex:1}}>
@@ -49,7 +122,8 @@ export function CompanyTab(){
             <span style={{fontSize:15,fontWeight:800,color:"#0F172A"}}>AI Grant Readiness Analysis</span>
           </div>
           <p style={{fontSize:13,color:"#334155",lineHeight:1.4,marginTop:4,marginBottom:0}}>
-            Profile is optimized. To reach a 95+ score, upload <strong>Export Compliance Certificates</strong> and detail your <strong>Community Benefit Plan</strong>.
+            {profile ? "Backend profile is connected. " : "No backend profile yet. "}
+            <strong>{missingHint}</strong>
           </p>
         </div>
         <div style={{flexShrink:0,display:"flex",gap:8}}>
@@ -58,8 +132,8 @@ export function CompanyTab(){
             <span style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>Strong Traction</span>
           </div>
           <div style={{background:"#fff",padding:"6px 10px",borderRadius:6,display:"flex",alignItems:"center",gap:6,boxShadow:"0 2px 4px rgba(0,0,0,0.05)"}}>
-            <MI name="warning" size={14} color="#F59E0B"/>
-            <span style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>Missing Docs</span>
+            <MI name={documents.length ? "folder" : "warning"} size={14} color="#F59E0B"/>
+            <span style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>{documents.length} Docs</span>
           </div>
         </div>
       </div>
@@ -95,12 +169,16 @@ export function CompanyTab(){
         <div className={s.panel} style={{borderRadius:20,padding:16}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <CardTitle icon="folder" title="Document Repository" color="#904D00" small/>
-            <span style={{color:"#006780",fontWeight:700,fontSize:11}}>View All →</span>
           </div>
           <div className={s.docGrid} style={{gap:12}}>
-            <div style={{flex:1,padding:12,borderRadius:12,border:"1px solid #E0E7EC",display:"flex",alignItems:"center",gap:8}}><MI name="picture_as_pdf" size={16} color="#BA1A1A"/><span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>SSM_2023.pdf</span></div>
-            <div style={{flex:1,padding:12,borderRadius:12,border:"1px solid #E0E7EC",display:"flex",alignItems:"center",gap:8}}><MI name="slideshow" size={16} color="#494BD6"/><span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>InvestorDeck.pptx</span></div>
-            <div style={{flex:1,padding:12,borderRadius:12,border:"1px solid #E0E7EC",display:"flex",alignItems:"center",gap:8}}><MI name="table_chart" size={16} color="#904D00"/><span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Financials.xlsx</span></div>
+            {documents.length === 0 ? (
+              <div style={{flex:1,padding:12,borderRadius:12,border:"1px solid #E0E7EC",display:"flex",alignItems:"center",gap:8,color:"#3D494D",fontSize:12}}>No documents stored yet.</div>
+            ) : documents.slice(0, 3).map((document) => (
+              <div key={document.id} style={{flex:1,padding:12,borderRadius:12,border:"1px solid #E0E7EC",display:"flex",alignItems:"center",gap:8}}>
+                <MI name={document.status === "generated" ? "auto_awesome" : "description"} size={16} color={document.status === "generated" ? "#494BD6" : "#904D00"}/>
+                <span style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{document.file_name}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -117,7 +195,7 @@ export function CompanyTab(){
             </svg>
             <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}>
               <span style={{fontSize:9,color:"#3D494D",fontWeight:700}}>TOTAL</span>
-              <span style={{fontSize:14,fontWeight:900,color:"#191C1E"}}>RM 500k</span>
+              <span style={{fontSize:14,fontWeight:900,color:"#191C1E"}}>RM {profile?.target_grant_amount ? profile.target_grant_amount.toLocaleString("en-MY") : "0"}</span>
             </div>
           </div>
           <div style={{height:12}}/>
@@ -139,23 +217,23 @@ export function CompanyTab(){
           <div style={{height:12}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
             <span style={{color:"#3D494D",fontSize:12,fontWeight:600}}>MRR</span>
-            <span style={{fontSize:14,fontWeight:900,color:"#191C1E"}}>RM 15,000</span>
+            <span style={{fontSize:14,fontWeight:900,color:"#191C1E"}}>RM {profile?.annual_revenue ? profile.annual_revenue.toLocaleString("en-MY") : "0"}</span>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{color:"#3D494D",fontSize:12,fontWeight:600}}>Pilots</span>
-            <span style={{fontSize:13,fontWeight:800,color:"#006780"}}>4 Factories</span>
+            <span style={{fontSize:13,fontWeight:800,color:"#006780"}}>{profile?.employee_count || 0} Employees</span>
           </div>
         </div>
       </div>
     </div>
 
-    {aiModalOpen && <AiAnalysisModal onClose={() => setAiModalOpen(false)} />}
+    {aiModalOpen && <AiAnalysisModal readinessScore={readinessScore} missingHint={missingHint} onClose={() => setAiModalOpen(false)} />}
   </div>;
 }
 
-function AiAnalysisModal({onClose}: {onClose:()=>void}) {
+function AiAnalysisModal({ readinessScore, missingHint, onClose }: { readinessScore: number; missingHint: string; onClose:()=>void }) {
   const [chat, setChat] = React.useState([
-    {role:"assistant", text:"Hi there! I'm your Grantly AI assistant. I've analyzed your profile and identified a few missing elements that are preventing a 95+ readiness score. How can I help you complete them?"}
+    {role:"assistant", text:`Hi there! I analyzed your backend profile. Current readiness is ${readinessScore}/100. ${missingHint}`}
   ]);
   const [input, setInput] = React.useState("");
 
@@ -188,15 +266,15 @@ function AiAnalysisModal({onClose}: {onClose:()=>void}) {
               <div style={{position:"relative",width:64,height:64,flexShrink:0}}>
                 <svg viewBox="0 0 36 36" style={{width:"100%",height:"100%",transform:"rotate(-90deg)"}}>
                   <circle cx="18" cy="18" r="16" fill="transparent" stroke="#E0E7EC" strokeWidth="4"/>
-                  <circle cx="18" cy="18" r="16" fill="transparent" stroke="#00B4D8" strokeWidth="4" strokeDasharray="85 100" strokeDashoffset="0"/>
+                  <circle cx="18" cy="18" r="16" fill="transparent" stroke="#00B4D8" strokeWidth="4" strokeDasharray={`${readinessScore} 100`} strokeDashoffset="0"/>
                 </svg>
                 <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <span style={{fontSize:18,fontWeight:900,color:"#006780"}}>85</span>
+                  <span style={{fontSize:18,fontWeight:900,color:"#006780"}}>{readinessScore}</span>
                 </div>
               </div>
               <div>
-                <div style={{fontSize:16, fontWeight:800, color:"#191C1E"}}>Current Score: 85 / 100</div>
-                <div style={{fontSize:13, color:"#3D494D", marginTop:4}}>Your profile is in the top 15% of peers.</div>
+                <div style={{fontSize:16, fontWeight:800, color:"#191C1E"}}>Current Score: {readinessScore} / 100</div>
+                <div style={{fontSize:13, color:"#3D494D", marginTop:4}}>{missingHint}</div>
               </div>
             </div>
 
@@ -293,14 +371,23 @@ function AiAnalysisModal({onClose}: {onClose:()=>void}) {
   );
 }
 
-export function DraftsTab(){
+export function DraftsTab({ documents = [], rankedGrants = [] }: { documents?: DocumentRead[]; rankedGrants?: RankedGrantRead[] }) {
   const [activeTag, setActiveTag] = React.useState("ALL");
 
-  const roadmaps = [
-    { id: 1, title: "DOE_EERE_CleanEnergy_Roadmap", tag: "READY", progress: 0.72, grant: "Clean Energy Infrastructure Deployment Grant", generated: "Generated just now", accent: "#006780" },
-    { id: 2, title: "NSF_Convergence_Materials_Roadmap", tag: "GENERATED", progress: 0.56, grant: "Sustainable Materials Development", generated: "Generated yesterday", accent: "#494BD6" },
-    { id: 3, title: "NIH_R01_Biomarkers_Readiness_Map", tag: "DRAFT", progress: 0.38, grant: "Advanced Biomarkers for Early Detection", generated: "Generated Oct 2, 2024", accent: "#6D797E" }
-  ];
+  const generatedDocuments = documents.filter((document) => document.status === "generated");
+  const roadmaps = generatedDocuments.map((document, index) => {
+    const grantId = Number(document.metadata_json?.grant_id);
+    const matchedGrant = rankedGrants.find((match) => match.grant.id === grantId);
+    return {
+      id: document.id,
+      title: document.file_name,
+      tag: document.document_type === "pitch_deck" ? "READY" : "GENERATED",
+      progress: document.document_type === "pitch_deck" ? 0.95 : 0.72,
+      grant: matchedGrant?.grant.title || "Generated application output",
+      generated: new Date(document.created_at).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" }),
+      accent: ["#006780", "#494BD6", "#904D00", "#6D797E"][index % 4],
+    };
+  });
 
   const filtered = activeTag === "ALL" ? roadmaps : roadmaps.filter(r => r.tag === activeTag);
 
@@ -325,7 +412,9 @@ export function DraftsTab(){
           ))}
         </div>
         {filtered.length === 0 ? (
-          <div style={{padding: 40, textAlign: "center", color: "#6D797E", fontSize: 14}}>No roadmaps found with this status.</div>
+          <div style={{padding: 40, textAlign: "center", color: "#6D797E", fontSize: 14}}>
+            No generated outputs found with this status. Open the Grants tab and generate a required document to store it in the backend.
+          </div>
         ) : (
           filtered.map(r => (
             <RoadmapCard key={r.id} title={r.title} tag={r.tag} progress={r.progress} grant={r.grant} generated={r.generated} accent={r.accent}/>
@@ -344,8 +433,11 @@ export function DraftsTab(){
           <div style={{height:16}}/>
           <div style={{fontWeight:900,letterSpacing:2,fontSize:12,color:"#191C1E"}}>RECENT ACTIVITY</div>
           <div style={{height:12}}/>
-          <ActivityRow color="#904D00" title="Generated Roadmap" detail="DOE_EERE_CleanEnergy - just now"/>
-          <ActivityRow color="#006780" title="Applied to Grant" detail="NSF_Convergence - 1d ago"/>
+          {generatedDocuments.slice(0, 2).length === 0 ? (
+            <ActivityRow color="#904D00" title="No generated outputs" detail="Generate from the Grants tab"/>
+          ) : generatedDocuments.slice(0, 2).map((document) => (
+            <ActivityRow key={document.id} color="#006780" title="Generated Output" detail={document.file_name}/>
+          ))}
         </div>
       </div>
     </div>
@@ -354,30 +446,6 @@ export function DraftsTab(){
 
 function CardTitle({icon,title,color,small}:{icon:string;title:string;color:string;small?:boolean}){
   return <div className={s.cardTitleRow}><div className={s.cardTitleIcon} style={{background:`${color}1f`}}><MI name={icon} size={16} color={color}/></div><span className={s.cardTitleText} style={{fontSize:small?16:18}}>{title}</span></div>;
-}
-
-function Field({label,value,prominent,pill,teal,boxed}:{label:string;value:string;prominent?:boolean;pill?:boolean;teal?:boolean;boxed?:boolean}){
-  const inner = pill
-    ? <span className={s.tag} style={{background:teal?"rgba(0,103,128,0.1)":"#F2F4F6",color:teal?"#006780":"#191C1E"}}>{value}</span>
-    : <div className={s.fieldValue} style={{fontSize:prominent?15:13,fontWeight:prominent?800:500}}>{value}</div>;
-  return <div><div className={s.fieldLabel}>{label}</div>{boxed?<div className={s.fieldBox}>{inner}</div>:inner}</div>;
-}
-
-function DocCard({icon,tag,title,color}:{icon:string;tag:string;title:string;color:string}){
-  return <div className={s.docCard}>
-    <div className={s.docCardHeader}><div className={s.docCardIcon} style={{background:`${color}1f`}}><MI name={icon} size={20} color={color}/></div><span className={s.tag} style={{background:"#F2F4F6",color:"#3D494D"}}>{tag}</span></div>
-    <div className={s.docCardTitle}>{title}</div>
-    <div style={{fontSize:12,color:"#3D494D",marginTop:8}}>Uploaded recently - 2.4 MB</div>
-    <div className={s.docBtnRow}><button className="btn-outline-sm" style={{flex:1,color:"#191C1E"}}>View</button><button className="btn-outline-sm" style={{flex:1,color:"#006780"}}>Update</button></div>
-  </div>;
-}
-
-function FundRow({color,title,sub}:{color:string;title:string;sub:string}){
-  return <div className={s.fundRow}><div className={s.fundDotOuter}><div className={s.fundDotInner} style={{background:color}}/></div><div><div style={{fontWeight:800,color:"#191C1E"}}>{title}</div><div style={{fontSize:12,color:"#3D494D"}}>{sub}</div></div></div>;
-}
-
-function MetricProgress({label,value,progress,color}:{label:string;value:string;progress:number;color:string}){
-  return <div><div className={s.metricProgressRow}><span style={{color:"#3D494D",fontSize:12}}>{label}</span><span style={{fontSize:13,fontWeight:900,color:"#191C1E"}}>{value}</span></div><div className={s.progressTrack}><div className={s.progressFill} style={{width:`${progress*100}%`,background:color}}/></div></div>;
 }
 
 function RoadmapCard({title,tag,progress,grant,generated,accent}:{title:string;tag:string;progress:number;grant:string;generated:string;accent:string}){

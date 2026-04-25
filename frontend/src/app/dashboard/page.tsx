@@ -1,17 +1,26 @@
 "use client";
 import React from "react";
 import Link from "next/link";
+import {
+  getWorkspace,
+  type CompanyProfileRead,
+  type DocumentRead,
+  type GrantRead,
+  type RankedGrantRead,
+  type UserRead,
+} from "@/services/grantlyApi";
+import { clearCurrentUser, rehydrateCurrentUser } from "@/services/grantlySession";
 import s from "./page.module.css";
 import { HomeTab, GrantTab } from "./tabs";
 import { CompanyTab, DraftsTab } from "./tabs2";
-import { IntegrationsTab, TeamTab } from "./tabs3";
+import { TeamTab } from "./tabs3";
 
 function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
   return <span className="material-icon" style={{ fontSize: size, color }}>{name}</span>;
 }
 
-const TAB_ICONS = ["grid_view", "folder", "domain", "history_edu", "cable", "group"];
-const TAB_LABELS = ["Home", "Grants", "Company", "Roadmaps", "Integrations", "Team"];
+const TAB_ICONS = ["grid_view", "folder", "domain", "history_edu", "group"];
+const TAB_LABELS = ["Home", "Grants", "Company", "Roadmaps", "Team"];
 
 export default function DashboardPage() {
   const [tab, setTab] = React.useState(0);
@@ -20,6 +29,14 @@ export default function DashboardPage() {
   const [compactMenuOpen, setCompactMenuOpen] = React.useState(false);
   const [notificationsOpen, setNotificationsOpen] = React.useState(false);
   const [auditLogOpen, setAuditLogOpen] = React.useState(false);
+  const [currentUser, setCurrentUser] = React.useState<UserRead | null>(null);
+  const [rankedMatches, setRankedMatches] = React.useState<RankedGrantRead[]>([]);
+  const [grantLibrary, setGrantLibrary] = React.useState<GrantRead[]>([]);
+  const [profile, setProfile] = React.useState<CompanyProfileRead | null>(null);
+  const [documents, setDocuments] = React.useState<DocumentRead[]>([]);
+  const [dataLoading, setDataLoading] = React.useState(true);
+  const [dataError, setDataError] = React.useState("");
+  const [focusGrantId, setFocusGrantId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     const u = () => setWidth(window.innerWidth);
@@ -28,13 +45,71 @@ export default function DashboardPage() {
     return () => window.removeEventListener("resize", u);
   }, []);
 
+  const reloadWorkspace = React.useCallback(async () => {
+    const user = await rehydrateCurrentUser();
+    setCurrentUser(user);
+    if (!user) {
+      setDataLoading(false);
+      setRankedMatches([]);
+      setGrantLibrary([]);
+      setProfile(null);
+      setDocuments([]);
+      return;
+    }
+
+    setDataLoading(true);
+    setDataError("");
+    try {
+      const workspace = await getWorkspace(user.id);
+      setCurrentUser(workspace.user);
+      setRankedMatches(workspace.ranked_grants);
+      setDocuments(workspace.documents);
+      setProfile(workspace.profile ?? null);
+      setGrantLibrary(workspace.grants);
+    } catch (error: unknown) {
+      setDataError(error instanceof Error ? error.message : "Unable to load dashboard data from the backend.");
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void reloadWorkspace();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [reloadWorkspace]);
+
   const compact = width < 900;
   const pages = [
-    <HomeTab key="home" onGenerateRoadmap={() => setTab(3)} />,
-    <GrantTab key="grants" onApply={() => setTab(3)} />,
-    <CompanyTab key="company" />,
-    <DraftsTab key="drafts" />,
-    <IntegrationsTab key="integrations" />,
+    <HomeTab
+      key="home"
+      currentUser={currentUser}
+      rankedGrants={rankedMatches}
+      allGrants={grantLibrary}
+      profile={profile}
+      documents={documents}
+      loading={dataLoading}
+      error={dataError}
+      onApply={(grantId) => {
+        setFocusGrantId(grantId);
+        setTab(1);
+      }}
+    />,
+    <GrantTab
+      key={`grants-${focusGrantId ?? "none"}`}
+      currentUser={currentUser}
+      rankedGrants={rankedMatches}
+      allGrants={grantLibrary}
+      profile={profile}
+      documents={documents}
+      loading={dataLoading}
+      error={dataError}
+      focusGrantId={focusGrantId}
+      onRefresh={reloadWorkspace}
+    />,
+    <CompanyTab key="company" currentUser={currentUser} profile={profile} documents={documents} onRefresh={reloadWorkspace} />,
+    <DraftsTab key="drafts" documents={documents} rankedGrants={rankedMatches} />,
     <TeamTab key="team" />,
   ];
 
@@ -136,7 +211,7 @@ export default function DashboardPage() {
                 <div key={item} className={s.profileMenuItem} onClick={() => setProfileOpen(false)}>{item}</div>
               )}
               <div className={s.profileMenuDivider} />
-              <Link href="/" className={s.profileMenuItem} onClick={() => setProfileOpen(false)}>Sign Out</Link>
+              <Link href="/" className={s.profileMenuItem} onClick={() => { clearCurrentUser(); setProfileOpen(false); }}>Sign Out</Link>
             </div>}
           </div>
         </div>

@@ -8,6 +8,7 @@ from backend.src.core.dag_router import (
     build_application_checklist,
     build_application_summary,
     build_coach_output,
+    cap_readiness_without_core_documents,
     evaluate_grant_match,
     evaluate_profile_readiness,
 )
@@ -43,15 +44,73 @@ def create_user(db: Session, username: str, email: str, external_auth_id: str | 
     return user
 
 
+def _has_profile_value(value: object) -> bool:
+    return value not in (None, "", {}, [])
+
+
+def _document_key(document: dict) -> tuple[str, str]:
+    return (str(document["document_type"]).lower(), str(document["file_name"]).lower())
+
+
+def _document_payload_from_model(document: CompanyDocument) -> dict:
+    return {
+        "document_type": document.document_type,
+        "file_name": document.file_name,
+        "file_url": document.file_url,
+        "status": document.status,
+        "metadata": document.metadata_json or {},
+    }
+
+
+def _profile_payload_from_model(profile: SMEProfile) -> dict:
+    return {
+        "company_name": profile.company_name,
+        "industry": profile.industry,
+        "nationality": profile.nationality,
+        "annual_revenue": profile.annual_revenue,
+        "employee_count": profile.employee_count,
+        "target_grant_amount": profile.target_grant_amount,
+        "business_stage": profile.business_stage,
+        "summary": profile.summary,
+        "questionnaire_answers": profile.questionnaire_answers or {},
+        "extracted_data": profile.extracted_data or {},
+    }
+
+
+def _merge_profile_payload(existing_profile: SMEProfile | None, incoming_payload: dict) -> dict:
+    if existing_profile is None:
+        return dict(incoming_payload)
+
+    merged = _profile_payload_from_model(existing_profile)
+    for key, value in incoming_payload.items():
+        if key in {"questionnaire_answers", "extracted_data"}:
+            if isinstance(value, dict) and value:
+                merged[key] = {**(merged.get(key) or {}), **value}
+            continue
+        if key == "company_name" and value == "Unknown Company" and _has_profile_value(merged.get(key)):
+            continue
+        if _has_profile_value(value):
+            merged[key] = value
+    return merged
+
+
 def upsert_company_profile(
     db: Session,
     user_id: int,
     profile_data: dict,
     documents: Iterable[dict] | None = None,
 ) -> SMEProfile:
+    documents_list = list(documents or [])
     profile = db.query(SMEProfile).filter(SMEProfile.user_id == user_id).first()
-    readiness_score = evaluate_profile_readiness(profile_data, documents or [])
-    profile_payload = dict(profile_data)
+    existing_documents = db.query(CompanyDocument).filter(CompanyDocument.user_id == user_id).all()
+    readiness_documents = {
+        _document_key(_document_payload_from_model(document)): _document_payload_from_model(document)
+        for document in existing_documents
+    }
+    readiness_documents.update({_document_key(document): document for document in documents_list})
+
+    profile_payload = _merge_profile_payload(profile, profile_data)
+    readiness_score = evaluate_profile_readiness(profile_payload, list(readiness_documents.values()))
     profile_payload["readiness_score"] = readiness_score
 
     if profile is None:
@@ -61,13 +120,13 @@ def upsert_company_profile(
         for key, value in profile_payload.items():
             setattr(profile, key, value)
 
-    if documents:
+    if documents_list:
         existing_docs = {
             (doc.document_type.lower(), doc.file_name.lower()): doc
-            for doc in db.query(CompanyDocument).filter(CompanyDocument.user_id == user_id).all()
+            for doc in existing_documents
         }
-        for document in documents:
-            doc_key = (document["document_type"].lower(), document["file_name"].lower())
+        for document in documents_list:
+            doc_key = _document_key(document)
             stored = existing_docs.get(doc_key)
             if stored is None:
                 db.add(
@@ -90,7 +149,7 @@ def upsert_company_profile(
         user_id=user_id,
         score=readiness_score,
         track="grant_matching" if readiness_score >= 60 else "onboarding",
-        trace={"profile_ready": readiness_score >= 60, "document_count": len(list(documents or []))},
+        trace={"profile_ready": readiness_score >= 60, "document_count": len(readiness_documents)},
         last_step="company_profile_completed",
         auto_commit=False,
     )
@@ -105,6 +164,35 @@ def get_company_profile(db: Session, user_id: int) -> SMEProfile | None:
 
 def get_company_documents(db: Session, user_id: int) -> list[CompanyDocument]:
     return db.query(CompanyDocument).filter(CompanyDocument.user_id == user_id).order_by(CompanyDocument.created_at.desc()).all()
+
+
+def refresh_company_profile_readiness(db: Session, user_id: int, auto_commit: bool = True) -> SMEProfile | None:
+    profile = get_company_profile(db, user_id)
+    if profile is None:
+        return None
+
+    documents = get_company_documents(db, user_id)
+    readiness_score = evaluate_profile_readiness(
+        _profile_payload_from_model(profile),
+        [_document_payload_from_model(document) for document in documents],
+    )
+    if profile.readiness_score == readiness_score:
+        return profile
+
+    profile.readiness_score = readiness_score
+    update_system_state(
+        db=db,
+        user_id=user_id,
+        score=readiness_score,
+        track="grant_matching" if readiness_score >= 60 else "onboarding",
+        trace={"profile_ready": readiness_score >= 60, "document_count": len(documents)},
+        last_step="company_profile_refreshed",
+        auto_commit=False,
+    )
+    if auto_commit:
+        db.commit()
+        db.refresh(profile)
+    return profile
 
 
 def upsert_company_document(db: Session, user_id: int, document_data: dict, auto_commit: bool = True) -> CompanyDocument:
@@ -163,8 +251,11 @@ def update_system_state(
     return state
 
 
-def list_grants(db: Session) -> list[Grant]:
-    return db.query(Grant).order_by(Grant.updated_at.desc()).all()
+def list_grants(db: Session, include_all: bool = False) -> list[Grant]:
+    query = db.query(Grant)
+    if not include_all:
+        query = query.filter(Grant.status == "open")
+    return query.order_by(Grant.updated_at.desc()).all()
 
 
 def get_grant_by_id(db: Session, grant_id: int) -> Grant | None:
@@ -343,6 +434,14 @@ def build_grant_application_snapshot(db: Session, user_id: int, grant_id: int) -
         if document is not None:
             item["download_url"] = f"/grants/{grant_id}/application/{user_id}/documents/{document.id}/download"
     summary = build_application_summary(checklist)
+    capped_readiness_score = cap_readiness_without_core_documents(
+        summary["readiness_score"],
+        {document.document_type for document in documents},
+    )
+    if capped_readiness_score != summary["readiness_score"]:
+        summary["readiness_score"] = capped_readiness_score
+        summary["readiness_level"] = f"{int(round(capped_readiness_score))}% Ready"
+        summary["track"] = "coach"
     requirement_types = {
         item["document_type"].lower()
         for item in checklist

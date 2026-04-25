@@ -45,6 +45,9 @@ See the root `.env.example` for expected values.
 Start the FastAPI backend from the repo root:
 
 ```powershell
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 

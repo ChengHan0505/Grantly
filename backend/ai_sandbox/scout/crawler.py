@@ -12,6 +12,32 @@ from bs4 import BeautifulSoup
 from .schemas import ScoutSource
 
 
+HIGH_VALUE_LINK_TERMS = (
+    "grant",
+    "fund",
+    "funding",
+    "programme",
+    "program",
+    "application",
+    "apply",
+    "incentive",
+)
+
+LOW_VALUE_LINK_TERMS = (
+    "privacy",
+    "terms",
+    "cookie",
+    "login",
+    "sign-in",
+    "signin",
+    "contact",
+    "career",
+    "news",
+    "media",
+    "event",
+)
+
+
 def _is_allowed_url(url: str, source: ScoutSource) -> bool:
     parsed = urlparse(url)
     domain = parsed.netloc.lower()
@@ -20,6 +46,23 @@ def _is_allowed_url(url: str, source: ScoutSource) -> bool:
     if not source.allow_url_patterns:
         return True
     return any(pattern.lower() in parsed.path.lower() for pattern in source.allow_url_patterns)
+
+
+def _extract_metadata(html: str) -> dict[str, str | None]:
+    soup = BeautifulSoup(html, "html.parser")
+    title = soup.title.get_text(" ", strip=True) if soup.title else None
+    description_node = soup.find("meta", attrs={"name": "description"}) or soup.find(
+        "meta",
+        attrs={"property": "og:description"},
+    )
+    description = description_node.get("content", "").strip() if description_node else None
+    h1 = soup.find("h1")
+    heading = h1.get_text(" ", strip=True) if h1 else None
+    return {
+        "title": title or None,
+        "description": description or None,
+        "heading": heading or None,
+    }
 
 
 def _extract_text(html: str, selectors: list[str]) -> str:
@@ -40,6 +83,45 @@ def _extract_text(html: str, selectors: list[str]) -> str:
         if body:
             chunks.append(body)
     return "\n".join(chunks)
+
+
+def _link_score(url: str, anchor_text: str) -> int:
+    parsed = urlparse(url)
+    haystack = f"{parsed.path} {parsed.query} {anchor_text}".lower()
+    score = 0
+    for term in HIGH_VALUE_LINK_TERMS:
+        if term in haystack:
+            score += 4
+    for term in LOW_VALUE_LINK_TERMS:
+        if term in haystack:
+            score -= 6
+    if parsed.path.rstrip("/").count("/") <= 1:
+        score += 1
+    if parsed.query:
+        score -= 1
+    return score
+
+
+def _discover_links(
+    html: str,
+    current_url: str,
+    source: ScoutSource,
+    visited: set[str],
+    max_links_per_page: int,
+) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    candidates: dict[str, tuple[int, int]] = {}
+    for index, anchor in enumerate(soup.find_all("a", href=True)):
+        candidate = urljoin(current_url, anchor["href"]).split("#")[0]
+        if candidate in visited or not _is_allowed_url(candidate, source):
+            continue
+        score = _link_score(candidate, anchor.get_text(" ", strip=True))
+        previous = candidates.get(candidate)
+        if previous is None or score > previous[0]:
+            candidates[candidate] = (score, index)
+
+    ordered = sorted(candidates.items(), key=lambda item: (-item[1][0], item[1][1]))
+    return [url for url, _score in ordered[:max_links_per_page]]
 
 
 def _robots_key(url: str) -> tuple[str, str]:
@@ -136,21 +218,12 @@ def crawl_source(
             response = fetch(current_url)
             response.raise_for_status()
             html = response.text
+            metadata = _extract_metadata(html)
             text = _extract_text(html, source.selectors)[:max_chars_per_page]
-            crawled_pages.append({"url": current_url, "text": text, "html": html})
+            crawled_pages.append({"url": current_url, "text": text, "html": html, "metadata": metadata})
 
-            soup = BeautifulSoup(html, "html.parser")
-            discovered = 0
-            for anchor in soup.find_all("a", href=True):
-                if discovered >= max_links_per_page:
-                    break
-                candidate = urljoin(current_url, anchor["href"])
-                candidate = candidate.split("#")[0]
-                if candidate in visited:
-                    continue
-                if _is_allowed_url(candidate, source):
-                    queue.append(candidate)
-                    discovered += 1
+            for candidate in _discover_links(html, current_url, source, visited, max_links_per_page):
+                queue.append(candidate)
         except requests.RequestException as exc:
             errors.append(f"{source.name}: failed to fetch {current_url} ({exc})")
 
