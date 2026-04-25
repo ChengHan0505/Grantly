@@ -2,63 +2,37 @@
 
 ## Overview
 
-**Grantly** is a FastAPI-based backend application designed to help Malaysian SMEs discover and apply for grants matching their business profile. The API provides endpoints for user management, company profiling, grant discovery, and application tracking.
+Grantly is a FastAPI backend for the pipeline in `docs/execution.md` and `docs/pipeline.md`:
 
-**Base URL:** `http://localhost:8000`  
-**Version:** 1.0.0  
-**Model:** ilmu-glm-5.1
+1. Hybrid onboarding and Extractor profile generation.
+2. Scout grant discovery.
+3. Evaluator ranked matching with evidence traces.
+4. Coach or Drafter application flow based on an 80% readiness threshold.
+5. Submission package download for manual portal submission.
 
----
+Base URL: `http://localhost:8000`  
+Interactive docs: `http://localhost:8000/docs`
 
-## Table of Contents
+## Common Contracts
 
-1. [Authentication](#authentication)
-2. [Error Handling](#error-handling)
-3. [Endpoints](#endpoints)
-   - [Health Check](#health-check)
-   - [User Management](#user-management)
-   - [Grants](#grants)
-4. [Data Models](#data-models)
-5. [Testing](#testing)
+Readiness and suitability scores are percentages from `0` to `100`.
 
----
+Requirement `source_type` values:
 
-## Authentication
+- `attached`: hard documents the SME must upload, such as SSM or audited financial statements.
+- `generated`: soft documents the Drafter Agent can create, such as proposals, pitch decks, or company profiles.
 
-Currently, no authentication is required. All endpoints are publicly accessible. CORS is enabled for all origins.
-
----
-
-## Error Handling
-
-All errors return a JSON response with the following format:
+Errors return:
 
 ```json
-{
-  "detail": "Error message describing what went wrong"
-}
+{ "detail": "Message describing the error." }
 ```
 
-### Common HTTP Status Codes
+## Health
 
-- **200 OK** - Request succeeded
-- **201 Created** - Resource created successfully
-- **400 Bad Request** - Invalid request parameters
-- **404 Not Found** - Resource not found
-- **409 Conflict** - Resource conflict (e.g., duplicate user)
-- **500 Internal Server Error** - Server error
+### `GET /`
 
----
-
-## Endpoints
-
-### Health Check
-
-#### `GET /`
-
-Check if the server is running and get system information.
-
-**Response:** 200 OK
+Returns backend status and model metadata.
 
 ```json
 {
@@ -68,740 +42,411 @@ Check if the server is running and get system information.
 }
 ```
 
-**Example cURL:**
-```bash
-curl http://localhost:8000/
-```
+## Users And Onboarding
 
----
+### `POST /users`
 
-### User Management
+Registers a user account. Clerk or another auth provider can pass its user id through `external_auth_id`.
 
-#### `POST /users`
-
-Register a new user account.
-
-**Request Body:**
+Request:
 
 ```json
 {
-  "username": "string (3-80 chars)",
-  "email": "string",
-  "external_auth_id": "string or null (optional)"
+  "username": "yap_founder",
+  "email": "founder@example.com",
+  "external_auth_id": "clerk_user_id"
 }
 ```
 
-**Response:** 201 Created
+Response: `201 UserRead`
+
+### `GET /users/{user_id}`
+
+Returns user details.
+
+### `PUT /users/{user_id}/company-profile`
+
+Creates or updates a normalized company profile directly.
+
+Request:
 
 ```json
 {
-  "id": 1,
-  "username": "user123",
-  "email": "user@example.com",
-  "external_auth_id": "auth_id_123",
-  "created_at": "2026-04-21T12:34:56"
-}
-```
-
-**Error Cases:**
-- `409 Conflict` - Username or email already exists
-
-**Example cURL:**
-```bash
-curl -X POST http://localhost:8000/users \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "john_doe",
-    "email": "john@example.com",
-    "external_auth_id": "oauth_123"
-  }'
-```
-
----
-
-#### `GET /users/{user_id}`
-
-Retrieve user details by ID.
-
-**Path Parameters:**
-- `user_id` (int, required) - The user ID
-
-**Response:** 200 OK
-
-```json
-{
-  "id": 1,
-  "username": "john_doe",
-  "email": "john@example.com",
-  "external_auth_id": "oauth_123",
-  "created_at": "2026-04-21T12:34:56"
-}
-```
-
-**Error Cases:**
-- `404 Not Found` - User does not exist
-
-**Example cURL:**
-```bash
-curl http://localhost:8000/users/1
-```
-
----
-
-#### `PUT /users/{user_id}/company-profile`
-
-Create or update a company profile for a user. This endpoint also manages associated documents.
-
-**Path Parameters:**
-- `user_id` (int, required) - The user ID
-
-**Request Body:**
-
-```json
-{
-  "company_name": "string (required)",
-  "industry": "string or null",
-  "nationality": "string or null",
-  "annual_revenue": "number or null",
-  "employee_count": "integer or null",
-  "target_grant_amount": "number or null",
-  "business_stage": "string or null (e.g., 'startup', 'growth', 'established')",
-  "summary": "string or null",
-  "questionnaire_answers": "object (optional)",
-  "extracted_data": "object (optional)",
+  "company_name": "YAP Sdn Bhd",
+  "industry": "ICT",
+  "nationality": "Malaysia",
+  "annual_revenue": 500000,
+  "employee_count": 5,
+  "target_grant_amount": 250000,
+  "business_stage": "growth",
+  "summary": "Local ICT SME applying for digitalisation funding.",
+  "questionnaire_answers": {},
+  "extracted_data": {},
   "documents": [
     {
-      "document_type": "string (e.g., 'financial_statement', 'business_plan')",
-      "file_name": "string",
-      "file_url": "string or null",
-      "status": "string (default: 'uploaded')",
-      "metadata": "object (optional)"
+      "document_type": "ssm",
+      "file_name": "SSM Certificate.pdf",
+      "file_url": null,
+      "status": "uploaded",
+      "metadata": {}
     }
   ]
 }
 ```
 
-**Response:** 200 OK
+Response: `CompanyProfileRead` with `readiness_score` as `0-100`.
+
+### `POST /users/{user_id}/company-profile/extract`
+
+Hybrid onboarding endpoint. Accepts questionnaire answers, document metadata, and/or Extractor Agent JSON shaped like the sandbox output.
+
+Request:
 
 ```json
 {
-  "id": 1,
-  "user_id": 1,
-  "company_name": "Tech Innovations Ltd",
-  "industry": "Technology",
-  "nationality": "Malaysia",
-  "annual_revenue": 500000,
-  "employee_count": 15,
-  "target_grant_amount": 100000,
-  "business_stage": "growth",
-  "summary": "An innovative tech startup focused on AI solutions",
-  "questionnaire_answers": {},
-  "extracted_data": {},
-  "readiness_score": 0.75,
-  "created_at": "2026-04-21T12:34:56",
-  "updated_at": "2026-04-21T12:34:56"
-}
-```
-
-**Error Cases:**
-- `404 Not Found` - User does not exist
-
-**Example cURL:**
-```bash
-curl -X PUT http://localhost:8000/users/1/company-profile \
-  -H "Content-Type: application/json" \
-  -d '{
-    "company_name": "Tech Innovations Ltd",
-    "industry": "Technology",
-    "nationality": "Malaysia",
-    "annual_revenue": 500000,
-    "employee_count": 15,
-    "target_grant_amount": 100000,
-    "business_stage": "growth",
-    "summary": "An innovative tech startup focused on AI solutions",
-    "documents": [
-      {
-        "document_type": "financial_statement",
-        "file_name": "2025_financial_report.pdf",
-        "file_url": "https://example.com/files/report.pdf"
-      }
-    ]
-  }'
-```
-
----
-
-#### `GET /users/{user_id}/company-profile`
-
-Retrieve the company profile for a user.
-
-**Path Parameters:**
-- `user_id` (int, required) - The user ID
-
-**Response:** 200 OK
-
-```json
-{
-  "id": 1,
-  "user_id": 1,
-  "company_name": "Tech Innovations Ltd",
-  "industry": "Technology",
-  "nationality": "Malaysia",
-  "annual_revenue": 500000,
-  "employee_count": 15,
-  "target_grant_amount": 100000,
-  "business_stage": "growth",
-  "summary": "An innovative tech startup focused on AI solutions",
-  "questionnaire_answers": {},
-  "extracted_data": {},
-  "readiness_score": 0.75,
-  "created_at": "2026-04-21T12:34:56",
-  "updated_at": "2026-04-21T12:34:56"
-}
-```
-
-**Error Cases:**
-- `404 Not Found` - Company profile not found
-
-**Example cURL:**
-```bash
-curl http://localhost:8000/users/1/company-profile
-```
-
----
-
-#### `GET /users/{user_id}/documents`
-
-List all documents associated with a user's company profile.
-
-**Path Parameters:**
-- `user_id` (int, required) - The user ID
-
-**Response:** 200 OK
-
-```json
-[
-  {
-    "id": 1,
-    "document_type": "financial_statement",
-    "file_name": "2025_financial_report.pdf",
-    "file_url": "https://example.com/files/report.pdf",
-    "status": "uploaded",
-    "metadata_json": {},
-    "created_at": "2026-04-21T12:34:56"
+  "raw_text": "YAP Sdn Bhd is a local ICT company...",
+  "questionnaire_answers": {
+    "annual_revenue": 500000
   },
-  {
-    "id": 2,
-    "document_type": "business_plan",
-    "file_name": "business_plan.pdf",
-    "file_url": "https://example.com/files/plan.pdf",
-    "status": "uploaded",
-    "metadata_json": {},
-    "created_at": "2026-04-21T12:34:56"
-  }
-]
-```
-
-**Error Cases:**
-- `404 Not Found` - User does not exist
-
-**Example cURL:**
-```bash
-curl http://localhost:8000/users/1/documents
-```
-
----
-
-#### `GET /users/{user_id}/system-state`
-
-Retrieve the system state for a user (readiness score, current track, etc.).
-
-**Path Parameters:**
-- `user_id` (int, required) - The user ID
-
-**Response:** 200 OK
-
-```json
-{
-  "user_id": 1,
-  "readiness_score": 0.75,
-  "current_track": "grant_discovery",
-  "evidence_trace": {},
-  "last_step": "profile_completion",
-  "updated_at": "2026-04-21T12:34:56"
+  "extractor_profile": {
+    "company_name": "YAP Sdn Bhd",
+    "ssm_number": "1234567-V",
+    "age_in_months": 24,
+    "full_time_employees": 5,
+    "ownership_majority": "Local",
+    "sector": "ICT",
+    "total_project_cost_rm": 500000,
+    "requested_funding_rm": 250000,
+    "outsourced_cost_rm": 20000,
+    "has_end_user_partner": true,
+    "documents_provided": ["SSM Certificate", "Pitch Deck"]
+  },
+  "documents": []
 }
 ```
 
-**Error Cases:**
-- `404 Not Found` - System state not found for user
-
-**Example cURL:**
-```bash
-curl http://localhost:8000/users/1/system-state
-```
-
----
-
-### Grants
-
-#### `POST /grants`
-
-Create a new grant record in the system.
-
-**Request Body:**
+Response:
 
 ```json
 {
-  "title": "string (required)",
-  "provider_name": "string (required)",
-  "source_url": "string or null",
-  "description": "string or null",
-  "amount_min": "number or null",
-  "amount_max": "number or null",
-  "nationality": "string or null",
-  "industry": "string or null",
-  "eligibility_notes": "string or null",
-  "application_deadline": "string or null (ISO format)",
-  "status": "string (default: 'open')",
-  "metadata_json": "object (optional)",
-  "requirements": [
-    {
-      "name": "string (required)",
-      "description": "string or null",
-      "source_type": "enum ('manual' | 'extracted' | 'inferred')",
-      "document_type": "string or null",
-      "is_required": "boolean (default: true)"
-    }
-  ]
+  "profile": { "id": 1, "user_id": 1, "company_name": "YAP Sdn Bhd", "readiness_score": 80.0 },
+  "documents": [],
+  "system_state": { "user_id": 1, "readiness_score": 80.0, "current_track": "grant_matching" },
+  "next_endpoint": "/grants/match/1"
 }
 ```
 
-**Response:** 201 Created
+### `GET /users/{user_id}/company-profile`
+
+Returns the generated profile.
+
+### `GET /users/{user_id}/documents`
+
+Returns uploaded and generated company documents.
+
+### `GET /users/{user_id}/system-state`
+
+Returns the user's current pipeline state.
+
+## Grants And Evaluator
+
+### `GET /grants`
+
+Lists all grants in the database for the Grant tab.
+
+### `POST /grants`
+
+Creates a grant record, normally from Scout.
+
+Request:
 
 ```json
 {
-  "id": 1,
-  "title": "SME Tech Innovation Grant",
-  "provider_name": "Ministry of Science & Technology",
+  "title": "MDEC MDCG",
+  "provider_name": "MDEC",
   "source_url": "https://example.com/grant",
-  "description": "Funding for tech startups developing innovative solutions",
-  "amount_min": 50000,
-  "amount_max": 500000,
+  "description": "Digital grant for Malaysian SMEs.",
+  "amount_min": 0,
+  "amount_max": 1000000,
   "nationality": "Malaysia",
-  "industry": "Technology",
-  "eligibility_notes": "Must be registered SME",
+  "industry": "ICT",
   "application_deadline": "2026-12-31",
   "status": "open",
   "metadata_json": {},
-  "created_at": "2026-04-21T12:34:56",
-  "updated_at": "2026-04-21T12:34:56",
   "requirements": [
     {
-      "id": 1,
-      "name": "Financial Statement",
-      "description": "Latest 2-year financial statement",
-      "source_type": "manual",
+      "name": "Audited Financials",
+      "description": "Latest audited financial statements.",
+      "source_type": "attached",
       "document_type": "financial_statement",
       "is_required": true
-    }
-  ]
-}
-```
-
-**Example cURL:**
-```bash
-curl -X POST http://localhost:8000/grants \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "SME Tech Innovation Grant",
-    "provider_name": "Ministry of Science & Technology",
-    "source_url": "https://example.com/grant",
-    "description": "Funding for tech startups",
-    "amount_min": 50000,
-    "amount_max": 500000,
-    "nationality": "Malaysia",
-    "industry": "Technology",
-    "application_deadline": "2026-12-31",
-    "requirements": [
-      {
-        "name": "Financial Statement",
-        "source_type": "manual",
-        "is_required": true
-      }
-    ]
-  }'
-```
-
----
-
-#### `GET /grants/{grant_id}`
-
-Retrieve detailed information about a specific grant.
-
-**Path Parameters:**
-- `grant_id` (int, required) - The grant ID
-
-**Response:** 200 OK
-
-```json
-{
-  "id": 1,
-  "title": "SME Tech Innovation Grant",
-  "provider_name": "Ministry of Science & Technology",
-  "source_url": "https://example.com/grant",
-  "description": "Funding for tech startups developing innovative solutions",
-  "amount_min": 50000,
-  "amount_max": 500000,
-  "nationality": "Malaysia",
-  "industry": "Technology",
-  "eligibility_notes": "Must be registered SME",
-  "application_deadline": "2026-12-31",
-  "status": "open",
-  "metadata_json": {},
-  "created_at": "2026-04-21T12:34:56",
-  "updated_at": "2026-04-21T12:34:56",
-  "requirements": [
-    {
-      "id": 1,
-      "name": "Financial Statement",
-      "description": "Latest 2-year financial statement",
-      "source_type": "manual",
-      "document_type": "financial_statement",
-      "is_required": true
-    }
-  ]
-}
-```
-
-**Error Cases:**
-- `404 Not Found` - Grant does not exist
-
-**Example cURL:**
-```bash
-curl http://localhost:8000/grants/1
-```
-
----
-
-#### `GET /grants/match/{user_id}`
-
-Get a ranked list of grants matching a user's company profile.
-
-**Path Parameters:**
-- `user_id` (int, required) - The user ID
-
-**Response:** 200 OK
-
-```json
-[
-  {
-    "grant": {
-      "id": 1,
-      "title": "SME Tech Innovation Grant",
-      "provider_name": "Ministry of Science & Technology",
-      "source_url": "https://example.com/grant",
-      "description": "Funding for tech startups developing innovative solutions",
-      "amount_min": 50000,
-      "amount_max": 500000,
-      "nationality": "Malaysia",
-      "industry": "Technology",
-      "eligibility_notes": "Must be registered SME",
-      "application_deadline": "2026-12-31",
-      "status": "open",
-      "metadata_json": {},
-      "created_at": "2026-04-21T12:34:56",
-      "updated_at": "2026-04-21T12:34:56",
-      "requirements": []
     },
-    "suitability_score": 0.92,
-    "status": "matched",
-    "reasons": [
-      "Industry matches: Technology",
-      "Matching nationality requirement: Malaysia",
-      "Grant amount aligns with target: 100,000 requested"
+    {
+      "name": "Pitch Deck",
+      "source_type": "generated",
+      "document_type": "pitch_deck",
+      "is_required": true
+    }
+  ]
+}
+```
+
+Response: `201 GrantRead`
+
+### `POST /grants/drafter/pitch-deck`
+
+Generates a `.pptx` pitch deck directly from a compact SME profile payload. This path is deterministic and does not call the LLM, keeping token usage minimal.
+
+Request:
+
+```json
+{
+  "sme_profile": {
+    "company_name": "YAP Sdn Bhd",
+    "sector": "ICT",
+    "full_time_employees": 5,
+    "age_in_months": 24,
+    "requested_funding_rm": 250000,
+    "total_project_cost_rm": 500000
+  },
+  "grant_context": {
+    "grant_name": "MDEC MDCG",
+    "provider_name": "MDEC"
+  },
+  "filename": "yap_mdec_pitch_deck.pptx"
+}
+```
+
+Response: PowerPoint file download.
+
+### `POST /grants/drafter/pitch-deck/creative`
+
+Uses Z.AI to create a compact creative layout plan, then renders it into `.pptx` locally. Set `ZAI_API_KEY` in `.env` or your console; do not send the token in the JSON body.
+
+Request body is the same as `POST /grants/drafter/pitch-deck`.
+
+Response: PowerPoint file download.
+
+For user-tied application storage, prefer the application endpoint below.
+
+### `GET /grants/match/{user_id}`
+
+Runs the Evaluator-style ranking over the grant database.
+
+Response:
+
+```json
+[
+  {
+    "grant": { "id": 1, "title": "MDEC MDCG" },
+    "suitability_score": 85.0,
+    "readiness_score": 75.0,
+    "readiness_level": "75% Ready",
+    "track": "coach",
+    "status": "needs_documents",
+    "reasons": ["Industry matches the grant focus."],
+    "evidence_traces": [
+      {
+        "requirement": "Mandatory document: Audited Financials",
+        "status": "UNMET",
+        "source_document": "Company Documents",
+        "reasoning": "Audited Financials still needs to be uploaded."
+      }
     ]
   }
 ]
 ```
 
-**Error Cases:**
-- `404 Not Found` - User does not exist
+### `GET /grants/{grant_id}`
 
-**Example cURL:**
-```bash
-curl http://localhost:8000/grants/match/1
-```
+Returns full grant details.
 
----
+## Application Flow
 
-#### `GET /grants/{grant_id}/application/{user_id}`
+### `GET /grants/{grant_id}/application/{user_id}`
 
-Get the grant application snapshot including a checklist of requirements and user's fulfillment status.
+Returns the grant application page payload: checklist, readiness score, branch, hard docs, generated docs, and Coach steps when readiness is below `80`.
 
-**Path Parameters:**
-- `grant_id` (int, required) - The grant ID
-- `user_id` (int, required) - The user ID
-
-**Response:** 200 OK
+Response:
 
 ```json
 {
-  "grant": {
-    "id": 1,
-    "title": "SME Tech Innovation Grant",
-    "provider_name": "Ministry of Science & Technology",
-    "source_url": "https://example.com/grant",
-    "description": "Funding for tech startups",
-    "amount_min": 50000,
-    "amount_max": 500000,
-    "nationality": "Malaysia",
-    "industry": "Technology",
-    "eligibility_notes": "Must be registered SME",
-    "application_deadline": "2026-12-31",
-    "status": "open",
-    "metadata_json": {},
-    "created_at": "2026-04-21T12:34:56",
-    "updated_at": "2026-04-21T12:34:56",
-    "requirements": []
-  },
+  "grant": { "id": 1, "title": "MDEC MDCG" },
   "checklist": [
     {
-      "requirement_id": 1,
-      "name": "Financial Statement",
-      "description": "Latest 2-year financial statement",
-      "source_type": "manual",
-      "document_type": "financial_statement",
-      "is_required": true,
-      "fulfilled": true,
-      "fulfillment_source": "uploaded_document_1",
-      "action_label": "✓ Provided"
-    },
-    {
-      "requirement_id": 2,
-      "name": "Business Plan",
-      "description": "Current business plan",
-      "source_type": "manual",
-      "document_type": "business_plan",
+      "requirement_id": 10,
+      "name": "Pitch Deck",
+      "source_type": "generated",
+      "document_type": "pitch_deck",
       "is_required": true,
       "fulfilled": false,
       "fulfillment_source": null,
-      "action_label": "Upload required"
+      "category": "generated",
+      "completion_status": "generatable",
+      "can_generate": true,
+      "can_upload": false,
+      "download_url": null,
+      "action_label": "Generate document"
     }
-  ]
+  ],
+  "readiness_score": 75.0,
+  "readiness_level": "75% Ready",
+  "track": "coach",
+  "missing_required_documents": ["Audited Financials"],
+  "attached_documents": [],
+  "generated_documents": [],
+  "coach": {
+    "encouraging_message": "You are close. These missing items are a practical checklist, not a rejection.",
+    "next_steps": []
+  },
+  "download_package_url": "/grants/1/application/1/package"
 }
 ```
 
-**Error Cases:**
-- `404 Not Found` - Grant not found
+### `POST /grants/{grant_id}/application/{user_id}/documents/generate`
 
-**Example cURL:**
-```bash
-curl http://localhost:8000/grants/1/application/1
-```
+Calls the Drafter path for a generated requirement and stores the output as a generated company document.
 
----
+Request:
 
-## Data Models
-
-### User Model
-
-```typescript
+```json
 {
-  id: integer,
-  username: string (3-80 characters),
-  email: string,
-  external_auth_id: string | null,
-  created_at: datetime
+  "requirement_id": 10,
+  "document_type": "pitch_deck",
+  "document_name": "Pitch Deck",
+  "regenerate": false,
+  "extra_context": {}
 }
 ```
 
-### Company Profile
+Response:
 
-```typescript
+```json
 {
-  id: integer,
-  user_id: integer,
-  company_name: string,
-  industry: string | null,
-  nationality: string | null,
-  annual_revenue: number | null,
-  employee_count: integer | null,
-  target_grant_amount: number | null,
-  business_stage: string | null,
-  summary: string | null,
-  questionnaire_answers: object,
-  extracted_data: object,
-  readiness_score: float,
-  created_at: datetime,
-  updated_at: datetime
+  "document": { "id": 5, "document_type": "pitch_deck", "status": "generated" },
+  "requirement_id": 10,
+  "document_type": "pitch_deck",
+  "content_markdown": "# YAP Sdn Bhd Pitch Deck...",
+  "message": "Generated document is ready for the submission package."
 }
 ```
 
-### Document
+### `POST /grants/{grant_id}/application/{user_id}/draft`
 
-```typescript
+Runs the ready-track Drafter bundle. This endpoint requires the application snapshot to be on the `drafter` track; otherwise it returns `409` with the missing hard documents.
+
+Request:
+
+```json
 {
-  id: integer,
-  document_type: string,
-  file_name: string,
-  file_url: string | null,
-  status: string,
-  metadata_json: object,
-  created_at: datetime
+  "uploaded_pitch_deck_text": null,
+  "extra_context": {}
 }
 ```
 
-### Grant
+Response:
 
-```typescript
+```json
 {
-  id: integer,
-  title: string,
-  provider_name: string,
-  source_url: string | null,
-  description: string | null,
-  amount_min: number | null,
-  amount_max: number | null,
-  nationality: string | null,
-  industry: string | null,
-  eligibility_notes: string | null,
-  application_deadline: string | null (ISO format),
-  status: string,
-  metadata_json: object,
-  created_at: datetime,
-  updated_at: datetime,
-  requirements: Requirement[]
+  "business_proposal_markdown": "YAP Sdn Bhd is...",
+  "presentation_script_markdown": "Good day...",
+  "generated_deck": [
+    {
+      "slide_number": 1,
+      "title": "Problem and Solution",
+      "bullet_points": ["..."]
+    }
+  ],
+  "deck_critique": null,
+  "generated_documents": []
 }
 ```
 
-### Requirement
+### `POST /grants/{grant_id}/application/{user_id}/pitch-deck/generate`
 
-```typescript
+Calls Z.AI with `ZAI_API_KEY` from backend settings, renders the creative slide plan into `.pptx`, and stores the file in the user's document database as a generated `pitch_deck` document.
+
+Request:
+
+```json
 {
-  id: integer,
-  name: string,
-  description: string | null,
-  source_type: 'manual' | 'extracted' | 'inferred',
-  document_type: string | null,
-  is_required: boolean
+  "creative": true,
+  "filename": "yap_mdec_pitch_deck.pptx",
+  "extra_context": {}
 }
 ```
 
-### Ranked Grant
+Response:
 
-```typescript
+```json
 {
-  grant: Grant,
-  suitability_score: float (0-1),
-  status: string,
-  reasons: string[]
+  "document": {
+    "id": 8,
+    "document_type": "pitch_deck",
+    "file_name": "yap_mdec_pitch_deck.pptx",
+    "status": "generated",
+    "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "generation_mode": "zai_creative",
+    "created_at": "2026-04-25T12:00:00"
+  },
+  "download_url": "/grants/1/application/1/documents/8/download",
+  "message": "Pitch deck generated by Drafter Agent and stored in the user document database.",
+  "layout_plan": {}
 }
 ```
 
-### Grant Application
+### `GET /grants/{grant_id}/application/{user_id}/package`
 
-```typescript
+Downloads a ZIP package containing:
+
+- `application_manifest.json`
+- `company_profile.md`
+- `generated/pitch_deck.pptx`
+- generated markdown documents under `generated/`
+- `uploaded_documents_manifest.json` for hard-doc file references
+
+### `GET /grants/{grant_id}/application/{user_id}/documents/{document_id}/download`
+
+Downloads a stored generated document directly. PPTX documents are decoded from database metadata and streamed as PowerPoint files. Generated markdown documents are streamed as text. For uploaded hard documents, returns the document-vault file reference because the API stores metadata rather than raw binary uploads.
+
+### `GET /grants/{grant_id}/application/{user_id}/pitch-deck.pptx`
+
+Downloads the latest stored pitch deck for this user and grant. Call `POST /grants/{grant_id}/application/{user_id}/pitch-deck/generate` first.
+
+## Scout
+
+### `POST /grants/scout/start`
+
+Starts the Scout Agent in the background.
+
+Request:
+
+```json
 {
-  grant: Grant,
-  checklist: ChecklistItem[]
+  "run_mode": "curated",
+  "source_file": null,
+  "max_links_per_page": 0
 }
 ```
 
-### Checklist Item
+Response: `202 ScoutStatusRead`
 
-```typescript
-{
-  requirement_id: integer,
-  name: string,
-  description: string | null,
-  source_type: 'manual' | 'extracted' | 'inferred',
-  document_type: string | null,
-  is_required: boolean,
-  fulfilled: boolean,
-  fulfillment_source: string | null,
-  action_label: string
-}
-```
+### `POST /grants/scout/stop`
 
-### System State
+Requests Scout to stop at the next safe checkpoint.
 
-```typescript
-{
-  user_id: integer,
-  readiness_score: float,
-  current_track: string,
-  evidence_trace: object,
-  last_step: string | null,
-  updated_at: datetime
-}
-```
+### `GET /grants/scout/status`
 
----
+Returns in-process Scout state.
 
-## Testing
+### `POST /grants/scout/run`
 
-### Interactive API Documentation
+Runs the curated Scout synchronously. Kept for demos and backward compatibility.
 
-Once the server is running, visit these URLs for interactive testing:
+### `GET /grants/scout/last-report`
 
-- **Swagger UI:** `http://localhost:8000/docs`
-- **ReDoc:** `http://localhost:8000/redoc`
+Returns the persisted last Scout report.
 
-### Quick Test Workflow
+### `GET /grants/scout/source-health`
 
-1. **Create a User**
-   ```bash
-   curl -X POST http://localhost:8000/users \
-     -H "Content-Type: application/json" \
-     -d '{"username":"testuser","email":"test@example.com"}'
-   ```
-   Note the returned `id` (e.g., 1)
-
-2. **Create a Company Profile**
-   ```bash
-   curl -X PUT http://localhost:8000/users/1/company-profile \
-     -H "Content-Type: application/json" \
-     -d '{
-       "company_name":"Test Company",
-       "industry":"Technology",
-       "nationality":"Malaysia",
-       "employee_count":10
-     }'
-   ```
-
-3. **Create a Grant**
-   ```bash
-   curl -X POST http://localhost:8000/grants \
-     -H "Content-Type: application/json" \
-     -d '{
-       "title":"Test Grant",
-       "provider_name":"Test Provider",
-       "industry":"Technology",
-       "nationality":"Malaysia"
-     }'
-   ```
-   Note the returned `id` (e.g., 1)
-
-4. **Get Matching Grants**
-   ```bash
-   curl http://localhost:8000/grants/match/1
-   ```
-
-5. **View Grant Application**
-   ```bash
-   curl http://localhost:8000/grants/1/application/1
-   ```
-
----
-
-## Additional Resources
-
-- **GitHub Repository:** [Grantly](https://github.com/grantly)
-- **Pitch Deck:** See `docs/pitch_deck.md`
-- **Project Explanation:** See `docs/project_explanation`
-- **Execution Plan:** See `docs/execution_plan.md`
-
----
-
-**Last Updated:** April 21, 2026  
-**API Status:** ✓ Active
+Checks curated source URLs and returns health status.

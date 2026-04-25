@@ -5,7 +5,7 @@ import Link from "next/link";
 import styles from "./page.module.css";
 
 function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
-  return <span className="material-icon" style={{ fontSize: size, color }}>{name}</span>;
+  return React.createElement('span', { className: "material-icon", style: { fontSize: size, color } }, name);
 }
 
 export default function InitializePage() {

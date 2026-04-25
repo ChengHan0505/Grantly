@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from backend.src.database.models import RequirementSource
 
@@ -32,6 +32,21 @@ class DocumentInput(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ExtractorProfileInput(BaseModel):
+    company_name: str | None = None
+    ssm_number: str | None = None
+    age_in_months: int | None = None
+    full_time_employees: int | None = None
+    ownership_majority: str | None = None
+    sector: str | None = None
+    total_project_cost_rm: float | None = None
+    requested_funding_rm: float | None = None
+    outsourced_cost_rm: float | None = None
+    has_end_user_partner: bool | None = None
+    documents_provided: list[str] = Field(default_factory=list)
+    uploaded_pitch_deck_text: str | None = None
+
+
 class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,6 +57,14 @@ class DocumentRead(BaseModel):
     status: str
     metadata_json: dict[str, Any]
     created_at: datetime
+
+    @field_serializer("metadata_json")
+    def serialize_metadata(self, metadata_json: dict[str, Any]) -> dict[str, Any]:
+        if "content_base64" not in metadata_json:
+            return metadata_json
+        sanitized = dict(metadata_json)
+        sanitized["content_base64"] = "<stored>"
+        return sanitized
 
 
 class CompanyProfileUpsert(BaseModel):
@@ -55,6 +78,14 @@ class CompanyProfileUpsert(BaseModel):
     summary: str | None = None
     questionnaire_answers: dict[str, Any] = Field(default_factory=dict)
     extracted_data: dict[str, Any] = Field(default_factory=dict)
+    documents: list[DocumentInput] = Field(default_factory=list)
+
+
+class CompanyProfileGenerationRequest(BaseModel):
+    raw_text: str | None = None
+    questionnaire_answers: dict[str, Any] = Field(default_factory=dict)
+    extracted_data: dict[str, Any] = Field(default_factory=dict)
+    extractor_profile: ExtractorProfileInput | None = None
     documents: list[DocumentInput] = Field(default_factory=list)
 
 
@@ -134,11 +165,22 @@ class GrantRead(BaseModel):
     requirements: list[RequirementRead] = Field(default_factory=list)
 
 
+class EvidenceTraceRead(BaseModel):
+    requirement: str
+    status: str
+    source_document: str
+    reasoning: str
+
+
 class RankedGrantRead(BaseModel):
     grant: GrantRead
     suitability_score: float
+    readiness_score: float
+    readiness_level: str
+    track: str
     status: str
     reasons: list[str]
+    evidence_traces: list[EvidenceTraceRead] = Field(default_factory=list)
 
 
 class ChecklistItemRead(BaseModel):
@@ -150,12 +192,36 @@ class ChecklistItemRead(BaseModel):
     is_required: bool
     fulfilled: bool
     fulfillment_source: str | None = None
+    category: str
+    completion_status: str
+    can_generate: bool
+    can_upload: bool
+    download_url: str | None = None
     action_label: str
+
+
+class CoachStepRead(BaseModel):
+    document_name: str
+    explanation: str
+    action_required: str
+
+
+class CoachOutputRead(BaseModel):
+    encouraging_message: str
+    next_steps: list[CoachStepRead] = Field(default_factory=list)
 
 
 class GrantApplicationRead(BaseModel):
     grant: GrantRead
     checklist: list[ChecklistItemRead]
+    readiness_score: float
+    readiness_level: str
+    track: str
+    missing_required_documents: list[str] = Field(default_factory=list)
+    attached_documents: list[DocumentRead] = Field(default_factory=list)
+    generated_documents: list[DocumentRead] = Field(default_factory=list)
+    coach: CoachOutputRead | None = None
+    download_package_url: str
 
 
 class SystemStateRead(BaseModel):
@@ -167,3 +233,97 @@ class SystemStateRead(BaseModel):
     evidence_trace: dict[str, Any]
     last_step: str | None = None
     updated_at: datetime
+
+
+class CompanyProfileGenerationRead(BaseModel):
+    profile: CompanyProfileRead
+    documents: list[DocumentRead]
+    system_state: SystemStateRead
+    next_endpoint: str
+
+
+class GenerateDocumentRequest(BaseModel):
+    requirement_id: int | None = None
+    document_type: str | None = None
+    document_name: str | None = None
+    regenerate: bool = False
+    extra_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class GeneratedDocumentRead(BaseModel):
+    document: DocumentRead
+    requirement_id: int | None = None
+    document_type: str
+    content_markdown: str
+    message: str
+
+
+class DraftApplicationRequest(BaseModel):
+    uploaded_pitch_deck_text: str | None = None
+    extra_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class SlideContentRead(BaseModel):
+    slide_number: int
+    title: str
+    bullet_points: list[str]
+
+
+class DeckCritiqueRead(BaseModel):
+    strengths: list[str]
+    weaknesses: list[str]
+    action_items_to_improve: list[str]
+
+
+class DrafterOutputRead(BaseModel):
+    business_proposal_markdown: str
+    presentation_script_markdown: str
+    generated_deck: list[SlideContentRead] | None = None
+    deck_critique: DeckCritiqueRead | None = None
+    generated_documents: list[DocumentRead] = Field(default_factory=list)
+
+
+class PitchDeckRequest(BaseModel):
+    sme_profile: dict[str, Any]
+    grant_context: dict[str, Any] = Field(default_factory=dict)
+    filename: str | None = None
+
+
+class PitchDeckGenerateRequest(BaseModel):
+    creative: bool = True
+    filename: str | None = None
+    extra_context: dict[str, Any] = Field(default_factory=dict)
+
+
+class GeneratedFileSummaryRead(BaseModel):
+    id: int
+    document_type: str
+    file_name: str
+    status: str
+    content_type: str | None = None
+    generation_mode: str | None = None
+    created_at: datetime
+
+
+class StoredPitchDeckRead(BaseModel):
+    document: GeneratedFileSummaryRead
+    download_url: str
+    message: str
+    layout_plan: dict[str, Any] = Field(default_factory=dict)
+
+
+class ScoutStartRequest(BaseModel):
+    source_file: str | None = None
+    run_mode: str = "curated"
+    max_links_per_page: int | None = None
+
+
+class ScoutStatusRead(BaseModel):
+    status: str
+    run_mode: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    max_runtime_hours: float
+    stop_requested: bool
+    last_report: dict[str, Any] | None = None
+    message: str | None = None

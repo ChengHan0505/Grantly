@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.scout.schemas import ScoutGrantRecord
+from .schemas import ScoutGrantRecord
 
 
 def normalize_record(record: ScoutGrantRecord) -> ScoutGrantRecord:

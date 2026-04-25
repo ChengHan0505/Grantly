@@ -4,7 +4,13 @@ from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
-from backend.src.core.dag_router import build_application_checklist, evaluate_grant_match, evaluate_profile_readiness
+from backend.src.core.dag_router import (
+    build_application_checklist,
+    build_application_summary,
+    build_coach_output,
+    evaluate_grant_match,
+    evaluate_profile_readiness,
+)
 from backend.src.database.models import (
     CompanyDocument,
     Grant,
@@ -83,8 +89,8 @@ def upsert_company_profile(
         db=db,
         user_id=user_id,
         score=readiness_score,
-        track="grant_search" if readiness_score >= 0.6 else "onboarding",
-        trace={"profile_ready": readiness_score >= 0.6, "document_count": len(list(documents or []))},
+        track="grant_matching" if readiness_score >= 60 else "onboarding",
+        trace={"profile_ready": readiness_score >= 60, "document_count": len(list(documents or []))},
         last_step="company_profile_completed",
         auto_commit=False,
     )
@@ -99,6 +105,37 @@ def get_company_profile(db: Session, user_id: int) -> SMEProfile | None:
 
 def get_company_documents(db: Session, user_id: int) -> list[CompanyDocument]:
     return db.query(CompanyDocument).filter(CompanyDocument.user_id == user_id).order_by(CompanyDocument.created_at.desc()).all()
+
+
+def upsert_company_document(db: Session, user_id: int, document_data: dict, auto_commit: bool = True) -> CompanyDocument:
+    document_type = document_data["document_type"]
+    file_name = document_data["file_name"]
+    stored = (
+        db.query(CompanyDocument)
+        .filter(CompanyDocument.user_id == user_id)
+        .filter(CompanyDocument.document_type == document_type)
+        .filter(CompanyDocument.file_name == file_name)
+        .first()
+    )
+    if stored is None:
+        stored = CompanyDocument(
+            user_id=user_id,
+            document_type=document_type,
+            file_name=file_name,
+            file_url=document_data.get("file_url"),
+            status=document_data.get("status", "uploaded"),
+            metadata_json=document_data.get("metadata", {}),
+        )
+        db.add(stored)
+    else:
+        stored.file_url = document_data.get("file_url", stored.file_url)
+        stored.status = document_data.get("status", stored.status)
+        stored.metadata_json = document_data.get("metadata", stored.metadata_json)
+
+    if auto_commit:
+        db.commit()
+        db.refresh(stored)
+    return stored
 
 
 def update_system_state(
@@ -294,4 +331,39 @@ def build_grant_application_snapshot(db: Session, user_id: int, grant_id: int) -
 
     documents = get_company_documents(db, user_id)
     checklist = build_application_checklist(grant.requirements, documents, profile)
-    return {"grant": grant, "checklist": checklist}
+    documents_by_type = {}
+    for doc in documents:
+        if doc.status == "generated" and doc.metadata_json.get("grant_id") != grant_id:
+            continue
+        documents_by_type.setdefault(doc.document_type.lower(), doc)
+    for item in checklist:
+        if not item["document_type"]:
+            continue
+        document = documents_by_type.get(item["document_type"].lower())
+        if document is not None:
+            item["download_url"] = f"/grants/{grant_id}/application/{user_id}/documents/{document.id}/download"
+    summary = build_application_summary(checklist)
+    requirement_types = {
+        item["document_type"].lower()
+        for item in checklist
+        if item["document_type"]
+    }
+    attached_documents = [
+        doc
+        for doc in documents
+        if doc.status != "generated" and doc.document_type.lower() in requirement_types
+    ]
+    generated_documents = [
+        doc
+        for doc in documents
+        if doc.status == "generated" and doc.metadata_json.get("grant_id") == grant_id
+    ]
+    return {
+        "grant": grant,
+        "checklist": checklist,
+        **summary,
+        "attached_documents": attached_documents,
+        "generated_documents": generated_documents,
+        "coach": build_coach_output(summary["missing_required_documents"]) if summary["track"] == "coach" else None,
+        "download_package_url": f"/grants/{grant_id}/application/{user_id}/package",
+    }

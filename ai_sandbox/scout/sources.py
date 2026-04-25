@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from src.scout.schemas import ScoutSource
+from .schemas import ScoutSource
 
 
 def load_sources_from_file(path: str) -> list[ScoutSource]:

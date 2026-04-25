@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.scout.schemas import ScoutGrantRecord
+from .schemas import ScoutGrantRecord
 
 
 def persist_raw_results(results_dir: str, records: list[ScoutGrantRecord]) -> Path:
