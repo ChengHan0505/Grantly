@@ -21,5 +21,55 @@
     ],
     "max_pages": 6,
     "enabled": true
+  },
+  {
+    "name": "cradle-grants",
+    "seed_urls": [
+      "https://cradle.com.my/grants/"
+    ],
+    "allowed_domains": [
+      "cradle.com.my",
+      "www.cradle.com.my"
+    ],
+    "allow_url_patterns": [
+      "/grants",
+      "/cip-",
+      "/fund"
+    ],
+    "selectors": [
+      "main",
+      "article",
+      ".content",
+      ".entry-content",
+      ".post-content",
+      "body"
+    ],
+    "max_pages": 12,
+    "enabled": true
+  },
+  {
+    "name": "smi-funding-grant",
+    "seed_urls": [
+      "https://www.smifunding.com/grant"
+    ],
+    "allowed_domains": [
+      "smifunding.com",
+      "www.smifunding.com"
+    ],
+    "allow_url_patterns": [
+      "/grant",
+      "/grants",
+      "/funding"
+    ],
+    "selectors": [
+      "main",
+      "article",
+      ".content",
+      ".entry-content",
+      ".post-content",
+      "body"
+    ],
+    "max_pages": 12,
+    "enabled": true
   }
 ]

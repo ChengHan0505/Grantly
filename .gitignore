@@ -32,3 +32,5 @@ venv/
 *.iml
 *.ipr
 *.iws
+
+.uv-cache

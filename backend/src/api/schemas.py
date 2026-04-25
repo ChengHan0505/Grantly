@@ -183,6 +183,14 @@ class RankedGrantRead(BaseModel):
     evidence_traces: list[EvidenceTraceRead] = Field(default_factory=list)
 
 
+class WorkspaceRead(BaseModel):
+    user: UserRead
+    profile: CompanyProfileRead | None = None
+    documents: list[DocumentRead] = Field(default_factory=list)
+    ranked_grants: list[RankedGrantRead] = Field(default_factory=list)
+    grants: list[GrantRead] = Field(default_factory=list)
+
+
 class ChecklistItemRead(BaseModel):
     requirement_id: int
     name: str
@@ -209,6 +217,27 @@ class CoachStepRead(BaseModel):
 class CoachOutputRead(BaseModel):
     encouraging_message: str
     next_steps: list[CoachStepRead] = Field(default_factory=list)
+
+
+class ApplicationRoadmapStepRead(BaseModel):
+    step_number: int
+    title: str
+    status: str
+    owner: str
+    description: str
+    action: str
+    requirement_id: int | None = None
+    document_type: str | None = None
+    download_url: str | None = None
+
+
+class ApplicationRoadmapRead(BaseModel):
+    grant_id: int
+    grant_title: str
+    provider_name: str
+    generated_by: str
+    encouraging_message: str
+    steps: list[ApplicationRoadmapStepRead] = Field(default_factory=list)
 
 
 class GrantApplicationRead(BaseModel):
@@ -263,10 +292,19 @@ class DraftApplicationRequest(BaseModel):
     extra_context: dict[str, Any] = Field(default_factory=dict)
 
 
+class SlideMetricRead(BaseModel):
+    label: str
+    value: str
+
+
 class SlideContentRead(BaseModel):
     slide_number: int
     title: str
+    subtitle: str | None = None
     bullet_points: list[str]
+    metrics: list[SlideMetricRead] = Field(default_factory=list)
+    grant_alignment: str | None = None
+    speaker_notes: str | None = None
 
 
 class DeckCritiqueRead(BaseModel):

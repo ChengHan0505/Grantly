@@ -15,7 +15,8 @@ The scout is intentionally source-constrained and does not crawl the entire inte
 Copy values into your local `.env`:
 
 - `ZAI_API_KEY`
-- `ZAI_MODEL` (default `glm-4.5-flash`)
+- `ZAI_BASE_URL` (default `https://api.ilmu.ai/v1`)
+- `ZAI_MODEL` or `GLM_MODEL` (default `ilmu-glm-5.1`)
 - `SCOUT_ENABLED` (`true`/`false`)
 - `SCOUT_MAX_PAGES_PER_SOURCE`
 - `SCOUT_MAX_LINKS_PER_PAGE`
@@ -25,3 +26,11 @@ Copy values into your local `.env`:
 
 - `POST /grants/scout/run` to trigger a scout run manually.
 - `GET /grants/scout/last-report` to fetch the latest run summary.
+
+### Agent package
+
+Backend agents now live in `backend/ai_sandbox/`. To test the Z.AI connection from the project root:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend.ai_sandbox.test_zai_key
+```

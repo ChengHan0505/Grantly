@@ -5,6 +5,25 @@ from backend.src.database.models import CompanyDocument, Grant, GrantRequirement
 
 
 READINESS_THRESHOLD_PERCENT = float(settings.readiness_threshold_percent)
+CORE_READINESS_DOCUMENT_CAP = 79.0
+CORE_DOCUMENT_ALIASES = {
+    "ssm": {
+        "ssm",
+        "company_ssm",
+        "ssm_cert",
+        "ssm_certificate",
+        "business_registration",
+        "company_registration",
+    },
+    "financial_statement": {
+        "financial_statement",
+        "financials",
+        "financial_statement_audited",
+        "audited_financial_statement",
+        "financial_report",
+        "management_accounts",
+    },
+}
 
 
 def _score_label(score: float) -> str:
@@ -19,6 +38,25 @@ def _document_label(document_type: str | None) -> str:
 
 def _has_value(value: object) -> bool:
     return value not in (None, "", {}, [])
+
+
+def _normalized_document_types(document_types: set[str]) -> set[str]:
+    normalized = set(document_types)
+    for canonical_type, aliases in CORE_DOCUMENT_ALIASES.items():
+        if normalized.intersection(aliases):
+            normalized.add(canonical_type)
+    return normalized
+
+
+def _cap_without_core_documents(score: float, document_types: set[str]) -> float:
+    normalized_types = _normalized_document_types(document_types)
+    if {"ssm", "financial_statement"}.issubset(normalized_types):
+        return score
+    return min(score, CORE_READINESS_DOCUMENT_CAP)
+
+
+def cap_readiness_without_core_documents(score: float, document_types: set[str]) -> float:
+    return round(_cap_without_core_documents(score, {document_type.lower() for document_type in document_types}), 1)
 
 
 def evaluate_profile_readiness(profile_data: dict, documents: list[dict]) -> float:
@@ -58,13 +96,13 @@ def evaluate_profile_readiness(profile_data: dict, documents: list[dict]) -> flo
     if profile_data.get("questionnaire_answers"):
         score += 10
 
-    document_types = {doc["document_type"].lower() for doc in documents}
+    document_types = _normalized_document_types({doc["document_type"].lower() for doc in documents if doc.get("document_type")})
     if "ssm" in document_types:
         score += 5
     if "financial_statement" in document_types:
         score += 5
 
-    return round(min(score, 100.0), 1)
+    return cap_readiness_without_core_documents(min(score, 100.0), document_types)
 
 
 def evaluate_grant_match(profile: SMEProfile | None, grant: Grant, documents: list[CompanyDocument]) -> dict:
@@ -184,6 +222,7 @@ def evaluate_grant_match(profile: SMEProfile | None, grant: Grant, documents: li
     required_traces = [trace for trace in evidence_traces if trace["status"] in {"MET", "UNMET", "UNKNOWN"}]
     met_count = sum(1 for trace in required_traces if trace["status"] == "MET")
     readiness_score = round((met_count / len(required_traces)) * 100, 1) if required_traces else final_score
+    readiness_score = cap_readiness_without_core_documents(readiness_score, available_document_types)
     track = "drafter" if readiness_score >= READINESS_THRESHOLD_PERCENT else "coach"
     status = "ready" if track == "drafter" else "needs_documents" if final_score >= 50 else "low_fit"
     if not reasons:

@@ -1,406 +1,1068 @@
 "use client";
 import React from "react";
+import Link from "next/link";
+import {
+  backendDownloadUrl,
+  draftApplicationBundle,
+  generateApplicationDocument,
+  generatePitchDeck,
+  getApplicationRoadmap,
+  getGrantApplication,
+  getScoutStatus,
+  runScoutAgent,
+  uploadApplicationDocument,
+  type ApplicationRoadmapRead,
+  type CompanyProfileRead,
+  type DocumentRead,
+  type GrantApplicationRead,
+  type GrantRead,
+  type RankedGrantRead,
+  type ScoutStatusRead,
+  type UserRead,
+} from "@/services/grantlyApi";
 import s from "./page.module.css";
 
-function MI({name,size=24,color}:{name:string;size?:number;color?:string}){
-  return <span className="material-icon" style={{fontSize:size,color}}>{name}</span>;
+function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
+  return <span className="material-icon" style={{ fontSize: size, color }}>{name}</span>;
 }
 
-type GrantInsight = {
-  icon: string;
-  color: string;
-  text: string;
+type DashboardDataProps = {
+  currentUser: UserRead | null;
+  rankedGrants: RankedGrantRead[];
+  allGrants?: GrantRead[];
+  profile: CompanyProfileRead | null;
+  documents: DocumentRead[];
+  loading?: boolean;
+  error?: string;
 };
 
-type Grant = {
-  id: number;
-  source: string;
-  title: string;
-  amount: string;
-  match: number;
-  status: string;
-  accent: string;
-  desc: string;
-  link: string;
-  aiAnalysis: GrantInsight[];
-};
+function formatAmount(grant: GrantRead): string {
+  const formatter = new Intl.NumberFormat("en-MY", { maximumFractionDigits: 0 });
+  if (grant.amount_min && grant.amount_max) return `RM ${formatter.format(grant.amount_min)}-${formatter.format(grant.amount_max)}`;
+  if (grant.amount_max) return `Up to RM ${formatter.format(grant.amount_max)}`;
+  if (grant.amount_min) return `From RM ${formatter.format(grant.amount_min)}`;
+  return "Amount TBC";
+}
 
-export function HomeTab({onGenerateRoadmap}: {onGenerateRoadmap?: ()=>void}){
-  const [selectedGrant, setSelectedGrant] = React.useState<Grant | null>(null);
+function formatDeadline(deadline?: string | null): string {
+  if (!deadline) return "Rolling deadline";
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return deadline;
+  return date.toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
+}
 
-  const grants: Grant[] = [
-    {id: 1, source:"FEDERAL", title:"NSF AI Research Grant", amount:"$2.5M", match:98, status:"READY TO SUBMIT", accent:"#006780", 
-     desc:"The National Science Foundation (NSF) supports fundamental research in artificial intelligence. This grant targets innovative AI architectures and their applications in critical sectors like manufacturing.",
-     link:"https://new.nsf.gov/funding",
-     aiAnalysis: [
-       {icon:"check_circle", color:"#10B981", text:"Perfect alignment with your predictive maintenance algorithms."},
-       {icon:"warning", color:"#F59E0B", text:"Requires an updated data privacy policy document."}
-     ]
-    },
-    {id: 2, source:"STATE", title:"CA Clean Energy Initiative", amount:"$1.2M", match:85, status:"AUDITED", accent:"#494BD6",
-     desc:"A state-level initiative focusing on technological solutions that reduce carbon footprints in industrial settings.",
-     link:"https://www.energy.ca.gov/funding-opportunities",
-     aiAnalysis: [
-       {icon:"check_circle", color:"#10B981", text:"Your Industry 4.0 goal directly reduces energy waste."},
-       {icon:"warning", color:"#F59E0B", text:"Needs a localized California impact statement."}
-     ]
-    },
-    {id: 3, source:"CORPORATE", title:"Google Tech Impact", amount:"$750k", match:72, status:"DRAFTING DECK", accent:"#904D00",
-     desc:"Google's philanthropic arm supports startups leveraging technology for broad industrial impact.",
-     link:"https://www.google.org/our-work/",
-     aiAnalysis: [
-       {icon:"check_circle", color:"#10B981", text:"Cloud-native architecture aligns well with Google Cloud ecosystem."},
-       {icon:"error", color:"#BA1A1A", text:"Missing open-source contribution history."}
-     ]
-    },
-    {id: 4, source:"FOUNDATION", title:"Gates Global Health", amount:"$500k", match:65, status:"DISCOVERED", accent:"#6D797E",
-     desc:"Supports initiatives that improve global health and infrastructure.",
-     link:"https://www.gatesfoundation.org/about/how-we-work/grant-opportunities",
-     aiAnalysis: [
-       {icon:"warning", color:"#F59E0B", text:"Manufacturing focus is slightly tangential to core health objectives."},
-       {icon:"check_circle", color:"#10B981", text:"Strong scalable technology base."}
-     ]
-    }
-  ];
+function deadlineStatus(deadline?: string | null): string {
+  if (!deadline) return "Rolling deadline";
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return deadline;
+  const now = new Date();
+  const days = Math.ceil((date.getTime() - now.getTime()) / 86400000);
+  if (days < 0) return `Closed ${Math.abs(days)} days ago`;
+  if (days === 0) return "Due today";
+  return `Due in ${days} days`;
+}
 
-  return <div style={{overflowY:"auto", paddingBottom: 40}}>
-    <div style={{display: "flex", flexWrap: "wrap", gap: 24}}>
-      
-      {/* LEFT COLUMN: Main Focus */}
-      <div style={{flex: "1 1 600px", display: "flex", flexDirection: "column", gap: 16}}>
-        <MetricCards/>
-        
-        {/* Vertical Pipeline Feed */}
-        <div className={s.panel} style={{padding: 24, borderRadius: 26, background: "rgba(242,244,246,0.78)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div>
-              <div style={{fontSize:20,fontWeight:900,letterSpacing:-0.5,color:"#191C1E"}}>Recommended Grants Feed</div>
-              <div style={{fontSize:13,color:"#3D494D",marginTop:4}}>AI-curated based on your SME profile</div>
+function accentForIndex(index: number): string {
+  return ["#006780", "#494BD6", "#904D00", "#6D797E"][index % 4];
+}
+
+function statusLabel(match: RankedGrantRead): string {
+  if (match.track === "drafter") return "READY FOR DRAFTER";
+  if (match.status === "needs_documents") return "NEEDS DOCUMENTS";
+  return match.status.replace(/_/g, " ").toUpperCase();
+}
+
+function formatGrantStatus(status?: string | null): string {
+  return (status || "unknown").replace(/_/g, " ").toUpperCase();
+}
+
+function grantStatusTone(status?: string | null): { background: string; border: string; color: string; icon: string } {
+  const normalized = (status || "unknown").toLowerCase();
+  if (normalized === "open") {
+    return { background: "#EAF8FC", border: "#B7EAFF", color: "#006780", icon: "check_circle" };
+  }
+  if (normalized === "closed") {
+    return { background: "#F2F4F6", border: "#D7DEE4", color: "#5F6E84", icon: "lock" };
+  }
+  return { background: "#FFF4E5", border: "#FFDDB6", color: "#904D00", icon: "help" };
+}
+
+export function HomeTab({
+  currentUser,
+  rankedGrants,
+  profile,
+  documents,
+  loading,
+  error,
+  onApply,
+}: DashboardDataProps & { onApply?: (grantId: number) => void }) {
+  const [selectedGrant, setSelectedGrant] = React.useState<RankedGrantRead | null>(null);
+
+  if (!currentUser) return <EmptyState title="No workspace session" body="Log in or register so Grantly can store your profile and rank grants against it." actionHref="/login" actionLabel="Login" />;
+  if (loading) return <DashboardLoading />;
+
+  return (
+    <div style={{ overflowY: "auto", paddingBottom: 40 }}>
+      {error && <InlineNotice tone="error" text={error} />}
+      {!profile && (
+        <InlineNotice
+          tone="info"
+          text="Business Fundamentals and the Document Vault are optional, but completing them improves match quality."
+          actionHref="/business-fundamentals"
+          actionLabel="Complete setup"
+        />
+      )}
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+        <div style={{ flex: "1 1 600px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <MetricCards rankedGrants={rankedGrants} profile={profile} documents={documents} />
+
+          <div className={s.panel} style={{ padding: 24, borderRadius: 26, background: "rgba(242,244,246,0.78)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5, color: "#191C1E" }}>Recommended Grants Feed</div>
+                <div style={{ fontSize: 13, color: "#3D494D", marginTop: 4 }}>Ranked by the backend Evaluator against your SME profile</div>
+              </div>
+              <button className="btn-soft"><MI name="sort" size={15} />Sort: Match %</button>
             </div>
-            <button className="btn-soft"><MI name="sort" size={15}/>Sort: Match %</button>
+            <div style={{ height: 20 }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {rankedGrants.length === 0 ? (
+                <div style={{ padding: 24, color: "#3D494D", fontSize: 14 }}>No grants are available yet. Start the backend so it can seed the sample grant database.</div>
+              ) : (
+                rankedGrants.map((match, index) => (
+                  <FeedCard key={match.grant.id} match={match} accent={accentForIndex(index)} onViewDetails={() => setSelectedGrant(match)} />
+                ))
+              )}
+            </div>
           </div>
-          <div style={{height: 20}}/>
-          <div style={{display: "flex", flexDirection: "column", gap: 12}}>
-            {grants.map(g => (
-              <FeedCard key={g.id} source={g.source} title={g.title} amount={g.amount} match={g.match} status={g.status} accent={g.accent} onViewDetails={() => setSelectedGrant(g)} />
-            ))}
-          </div>
+        </div>
+
+        <div style={{ flex: "1 1 300px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <RadarWidget profile={profile} topMatch={rankedGrants[0]} documents={documents} />
+          <PitchDeckWidget documents={documents} rankedGrants={rankedGrants} />
+          <TimelineWidget rankedGrants={rankedGrants} />
         </div>
       </div>
 
-      {/* RIGHT COLUMN: Graphical Views */}
-      <div style={{flex: "1 1 300px", display: "flex", flexDirection: "column", gap: 16}}>
-        <RadarWidget />
-        <PitchDeckWidget />
-        <TimelineWidget />
-      </div>
-
+      {selectedGrant && (
+        <GrantModal grant={selectedGrant} onClose={() => setSelectedGrant(null)} onApply={onApply} />
+      )}
     </div>
-
-    {selectedGrant && (
-      <GrantModal grant={selectedGrant} onClose={() => setSelectedGrant(null)} onGenerateRoadmap={onGenerateRoadmap} />
-    )}
-  </div>;
+  );
 }
 
-function RadarWidget() {
+function DashboardLoading() {
   return (
-    <div className={s.panel} style={{padding: 24, borderRadius: 26}}>
-      <div style={{fontWeight: 900, fontSize: 16, color: "#191C1E"}}>SME Suitability Analysis</div>
-      <div style={{color: "#3D494D", fontSize: 12, marginTop: 4}}>Based on your uploaded documents</div>
-      <div style={{height: 20}}/>
-      <div style={{position: "relative", width: 180, height: 180, margin: "0 auto"}}>
-        <svg viewBox="0 0 100 100" style={{width: "100%", height: "100%", overflow: "visible"}}>
-          {/* Background grid */}
-          <polygon points="50,10 90,50 50,90 10,50" fill="none" stroke="#E0E7EC" strokeWidth="1"/>
-          <polygon points="50,30 70,50 50,70 30,50" fill="none" stroke="#E0E7EC" strokeWidth="1"/>
-          <line x1="50" y1="10" x2="50" y2="90" stroke="#E0E7EC" strokeWidth="1"/>
-          <line x1="10" y1="50" x2="90" y2="50" stroke="#E0E7EC" strokeWidth="1"/>
-          {/* Data shape */}
-          <polygon points="50,20 85,50 50,65 20,50" fill="rgba(0,180,216,0.2)" stroke="#00B4D8" strokeWidth="2"/>
-          {/* Labels */}
-          <text x="50" y="5" fontSize="6" textAnchor="middle" fill="#3D494D" fontWeight="700">Innovation</text>
+    <div className={s.panel} style={{ borderRadius: 26, padding: 32, display: "flex", alignItems: "center", gap: 14 }}>
+      <MI name="sync" size={22} color="#006780" />
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 900, color: "#191C1E" }}>Loading backend workspace</div>
+        <div style={{ fontSize: 13, color: "#3D494D", marginTop: 4 }}>Fetching profile, documents, and ranked grants.</div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ title, body, actionHref, actionLabel }: { title: string; body: string; actionHref: string; actionLabel: string }) {
+  return (
+    <div className={s.panel} style={{ borderRadius: 26, padding: 32, textAlign: "center" }}>
+      <MI name="account_circle" size={36} color="#006780" />
+      <div style={{ height: 12 }} />
+      <div style={{ fontSize: 18, fontWeight: 900, color: "#191C1E" }}>{title}</div>
+      <div style={{ fontSize: 13, color: "#3D494D", margin: "8px auto 18px", maxWidth: 460, lineHeight: 1.5 }}>{body}</div>
+      <Link href={actionHref} className="btn-primary" style={{ display: "inline-flex" }}>{actionLabel}</Link>
+    </div>
+  );
+}
+
+function InlineNotice({ tone, text, actionHref, actionLabel }: { tone: "info" | "error"; text: string; actionHref?: string; actionLabel?: string }) {
+  const isError = tone === "error";
+  return (
+    <div style={{ padding: 14, borderRadius: 14, marginBottom: 16, background: isError ? "#fff0f0" : "#eef9fd", border: `1px solid ${isError ? "#fca5a5" : "#b7eaff"}`, display: "flex", gap: 12, alignItems: "center", color: isError ? "#93000A" : "#064F62", fontSize: 13 }}>
+      <MI name={isError ? "error" : "info"} size={18} color={isError ? "#BA1A1A" : "#006780"} />
+      <span style={{ flex: 1 }}>{text}</span>
+      {actionHref && actionLabel && <Link href={actionHref} style={{ fontWeight: 900, color: isError ? "#BA1A1A" : "#006780" }}>{actionLabel}</Link>}
+    </div>
+  );
+}
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+function radarPoint(axis: "top" | "right" | "bottom" | "left", score: number): string {
+  const radius = 8 + clampScore(score) * 0.32;
+  if (axis === "top") return `50,${50 - radius}`;
+  if (axis === "right") return `${50 + radius},50`;
+  if (axis === "bottom") return `50,${50 + radius}`;
+  return `${50 - radius},50`;
+}
+
+function RadarWidget({ profile, topMatch, documents }: { profile: CompanyProfileRead | null; topMatch?: RankedGrantRead; documents: DocumentRead[] }) {
+  const readiness = Math.round(profile?.readiness_score ?? topMatch?.readiness_score ?? 0);
+  const match = Math.round(topMatch?.suitability_score ?? 0);
+  const requiredTypes = new Set(topMatch?.grant.requirements.filter((requirement) => requirement.document_type).map((requirement) => requirement.document_type?.toLowerCase()));
+  const uploadedTypes = new Set(documents.map((document) => document.document_type.toLowerCase()));
+  const documentCoverage = requiredTypes.size
+    ? Math.round(([...requiredTypes].filter((type) => type && uploadedTypes.has(type)).length / requiredTypes.size) * 100)
+    : Math.min(100, documents.length * 25);
+  const fitConfidence = Math.round((readiness * 0.45) + (match * 0.55));
+  const points = [
+    radarPoint("top", readiness),
+    radarPoint("right", match),
+    radarPoint("bottom", documentCoverage),
+    radarPoint("left", fitConfidence),
+  ].join(" ");
+
+  return (
+    <div className={s.panel} style={{ padding: 24, borderRadius: 26 }}>
+      <div style={{ fontWeight: 900, fontSize: 16, color: "#191C1E" }}>SME Suitability Analysis</div>
+      <div style={{ color: "#3D494D", fontSize: 12, marginTop: 4 }}>Backend readiness: {readiness}%</div>
+      <div style={{ height: 20 }} />
+      <div style={{ position: "relative", width: 180, height: 180, margin: "0 auto" }}>
+        <svg viewBox="0 0 100 100" style={{ width: "100%", height: "100%", overflow: "visible" }}>
+          <polygon points="50,10 90,50 50,90 10,50" fill="none" stroke="#E0E7EC" strokeWidth="1" />
+          <polygon points="50,30 70,50 50,70 30,50" fill="none" stroke="#E0E7EC" strokeWidth="1" />
+          <line x1="50" y1="10" x2="50" y2="90" stroke="#E0E7EC" strokeWidth="1" />
+          <line x1="10" y1="50" x2="90" y2="50" stroke="#E0E7EC" strokeWidth="1" />
+          <polygon points={points} fill="rgba(0,180,216,0.2)" stroke="#00B4D8" strokeWidth="2" />
+          <text x="50" y="5" fontSize="6" textAnchor="middle" fill="#3D494D" fontWeight="700">Profile</text>
           <text x="96" y="52" fontSize="6" textAnchor="start" fill="#3D494D" fontWeight="700">Market</text>
-          <text x="50" y="99" fontSize="6" textAnchor="middle" fill="#3D494D" fontWeight="700">Impact</text>
-          <text x="4" y="52" fontSize="6" textAnchor="end" fill="#3D494D" fontWeight="700">Team</text>
+          <text x="50" y="99" fontSize="6" textAnchor="middle" fill="#3D494D" fontWeight="700">Docs</text>
+          <text x="4" y="52" fontSize="6" textAnchor="end" fill="#3D494D" fontWeight="700">Fit</text>
         </svg>
       </div>
-      <div style={{height: 16}}/>
-      <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-        <span style={{fontSize: 13, fontWeight: 800, color: "#006780"}}>Overall Match: 88%</span>
-        <button className="btn-soft" style={{fontSize: 11, padding: "4px 8px"}}><MI name="tune" size={14}/> Adjust</button>
+      <div style={{ height: 16 }} />
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "#006780" }}>Top Match: {match}%</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: "#3D494D" }}>Docs: {documentCoverage}%</span>
+        <Link href="/business-fundamentals" className="btn-soft" style={{ fontSize: 11, padding: "4px 8px" }}><MI name="tune" size={14} /> Update</Link>
       </div>
     </div>
   );
 }
 
-function PitchDeckWidget() {
+function PitchDeckWidget({ documents, rankedGrants }: { documents: DocumentRead[]; rankedGrants: RankedGrantRead[] }) {
+  const generatedDeck = documents.find((document) => document.document_type === "pitch_deck" && document.status === "generated");
+  const needsDeck = rankedGrants.some((match) => match.grant.requirements.some((requirement) => requirement.document_type === "pitch_deck"));
+  const progress = generatedDeck ? 100 : needsDeck ? 35 : 0;
+
   return (
-    <div className={s.panel} style={{padding: 24, borderRadius: 26, background: "linear-gradient(135deg, rgba(73,75,214,0.05), rgba(0,180,216,0.05))"}}>
-      <div style={{fontWeight: 900, fontSize: 16, color: "#191C1E"}}>AI Pitch Deck Engine</div>
-      <div style={{color: "#3D494D", fontSize: 12, marginTop: 4}}>Compiling your narrative</div>
-      <div style={{height: 20}}/>
-      <div style={{display: "flex", alignItems: "center", gap: 16}}>
-        <div style={{position: "relative", width: 56, height: 56}}>
-          <svg viewBox="0 0 36 36" style={{width: "100%", height: "100%", transform: "rotate(-90deg)"}}>
-            <circle cx="18" cy="18" r="16" fill="none" stroke="#E0E7EC" strokeWidth="3"/>
-            <circle cx="18" cy="18" r="16" fill="none" stroke="#494BD6" strokeWidth="3" strokeDasharray="100" strokeDashoffset="25" strokeLinecap="round"/>
+    <div className={s.panel} style={{ padding: 24, borderRadius: 26, background: "linear-gradient(135deg, rgba(73,75,214,0.05), rgba(0,180,216,0.05))" }}>
+      <div style={{ fontWeight: 900, fontSize: 16, color: "#191C1E" }}>AI Pitch Deck Engine</div>
+      <div style={{ color: "#3D494D", fontSize: 12, marginTop: 4 }}>{generatedDeck ? "Generated deck stored in backend" : "Available on grants with pitch deck requirements"}</div>
+      <div style={{ height: 20 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ position: "relative", width: 56, height: 56 }}>
+          <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
+            <circle cx="18" cy="18" r="16" fill="none" stroke="#E0E7EC" strokeWidth="3" />
+            <circle cx="18" cy="18" r="16" fill="none" stroke="#494BD6" strokeWidth="3" strokeDasharray="100" strokeDashoffset={100 - progress} strokeLinecap="round" />
           </svg>
-          <div style={{position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: "#494BD6"}}>75%</div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: "#494BD6" }}>{progress}%</div>
         </div>
-        <div style={{flex: 1}}>
-          <div style={{fontSize: 13, fontWeight: 700, color: "#191C1E"}}>{"Drafting 'Financials'"}</div>
-          <div style={{fontSize: 11, color: "#3D494D", marginTop: 4}}>Synthesizing from uploaded Excel models...</div>
-        </div>
-      </div>
-      <div style={{height: 20}}/>
-      <button className="btn-primary" style={{width: "100%", justifyContent: "center"}} disabled><MI name="sync" size={16}/> Generating...</button>
-    </div>
-  );
-}
-
-function TimelineWidget() {
-  return (
-    <div className={s.panel} style={{padding: 24, borderRadius: 26}}>
-      <div style={{fontWeight: 900, fontSize: 16, color: "#191C1E"}}>Upcoming Deadlines</div>
-      <div style={{height: 16}}/>
-      <div style={{display: "flex", flexDirection: "column", gap: 12}}>
-        <div style={{display: "flex", gap: 12}}>
-          <div style={{width: 3, background: "#BA1A1A", borderRadius: 2}}/>
-          <div>
-            <div style={{fontSize: 13, fontWeight: 800, color: "#191C1E"}}>NSF AI Research</div>
-            <div style={{fontSize: 11, color: "#BA1A1A", fontWeight: 700, marginTop: 2}}>Due in 5 Days (Oct 15)</div>
-          </div>
-        </div>
-        <div style={{display: "flex", gap: 12}}>
-          <div style={{width: 3, background: "#904D00", borderRadius: 2}}/>
-          <div>
-            <div style={{fontSize: 13, fontWeight: 800, color: "#191C1E"}}>Gates Global Health</div>
-            <div style={{fontSize: 11, color: "#904D00", fontWeight: 700, marginTop: 2}}>Due Nov 01</div>
-          </div>
-        </div>
-        <div style={{display: "flex", gap: 12}}>
-          <div style={{width: 3, background: "#006780", borderRadius: 2}}/>
-          <div>
-            <div style={{fontSize: 13, fontWeight: 800, color: "#191C1E"}}>CA Clean Energy</div>
-            <div style={{fontSize: 11, color: "#3D494D", marginTop: 2}}>Rolling Deadline</div>
-          </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#191C1E" }}>{generatedDeck?.file_name || "No generated pitch deck yet"}</div>
+          <div style={{ fontSize: 11, color: "#3D494D", marginTop: 4 }}>Open a grant application to generate and store a deck.</div>
         </div>
       </div>
     </div>
   );
 }
 
-function MetricCards(){
-  return <div className={s.metricGrid}>
-    <div className={s.metricCard}>
-      <div className={s.metricHeader}><span className={s.metricTitle}>READINESS SCORE</span><MI name="speed" size={16} color="#006780"/></div>
-      <div className={s.metricValue} style={{fontSize:34,color:"#006780"}}>88.4%</div>
-      <div className={s.metricCaption}>+2.1% from last audit</div>
-    </div>
-    <div className={s.metricCard}>
-      <div className={s.metricHeader}><span className={s.metricTitle}>ACTIVE PIPELINE</span><MI name="account_tree" size={16} color="#494BD6"/></div>
-      <div className={s.metricValue} style={{fontSize:34,color:"#494BD6"}}>12</div>
-      <div className={s.metricCaption}>3 grants requiring attention</div>
-      <div style={{height:10}}/>
-      <div className={s.stackedProgress}>
-        <div style={{flex:40,background:"#006780"}}/>
-        <div style={{flex:35,background:"#494BD6"}}/>
-        <div style={{flex:25,background:"#904D00"}}/>
-      </div>
-    </div>
-    <div className={s.metricCard}>
-      <div className={s.metricHeader}><span className={s.metricTitle}>DOCUMENT HEALTH</span><MI name="health_and_safety" size={16} color="#904D00"/></div>
-      <div className={s.metricValue} style={{fontSize:26,color:"#191C1E"}}>Good</div>
-      <div className={s.metricCaption}>92% metadata completion</div>
-      <div style={{height:10}}/>
-      <div style={{display:"flex",alignItems:"center",gap:6}}><MI name="check_circle" size={13} color="#006780"/><span style={{color:"#3D494D",fontSize:12}}>All critical tags present</span></div>
-    </div>
-  </div>;
-}
+function TimelineWidget({ rankedGrants }: { rankedGrants: RankedGrantRead[] }) {
+  const grantsWithDeadlines = rankedGrants
+    .filter((match) => match.grant.application_deadline)
+    .slice()
+    .sort((a, b) => new Date(a.grant.application_deadline || "").getTime() - new Date(b.grant.application_deadline || "").getTime())
+    .slice(0, 3);
 
-function FeedCard({source, title, amount, match, status, accent, onViewDetails}:{source:string;title:string;amount:string;match:number;status:string;accent:string;onViewDetails:()=>void}) {
-  return (
-    <div className={s.panel} style={{padding: 16, borderRadius: 16, display: "flex", alignItems: "center", gap: 16, background: "#fff", boxShadow: "0 4px 12px rgba(0,0,0,0.03)"}}>
-      <div style={{width: 54, height: 54, borderRadius: "50%", background: `${accent}1f`, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", flexShrink: 0}}>
-        <span style={{fontWeight: 900, fontSize: 15, color: accent, lineHeight: 1}}>{match}%</span>
-        <span style={{fontSize: 9, fontWeight: 800, color: accent, marginTop: 2}}>FIT</span>
-      </div>
-      <div style={{flex: 1}}>
-        <div style={{display: "flex", gap: 8, alignItems: "center"}}>
-          <span className={s.tag} style={{background: `${accent}1a`, color: accent, fontSize: 10}}>{source}</span>
-          <span style={{fontSize: 10, fontWeight: 800, color: "#6D797E", letterSpacing: 0.5}}>{status}</span>
-        </div>
-        <div style={{fontSize: 15, fontWeight: 900, color: "#191C1E", marginTop: 8}}>{title}</div>
-      </div>
-      <div style={{textAlign: "right", flexShrink: 0}}>
-        <div style={{fontSize: 16, fontWeight: 900, color: "#006780"}}>{amount}</div>
-        <button className="btn-outline-sm" onClick={onViewDetails} style={{marginTop: 10, padding: "6px 14px", fontSize: 12}}>View Details</button>
-      </div>
-    </div>
-  );
-}
+  const items = grantsWithDeadlines.length > 0 ? grantsWithDeadlines : rankedGrants.slice(0, 3);
 
-function GrantModal({grant, onClose, onGenerateRoadmap}: {grant: Grant; onClose:()=>void; onGenerateRoadmap?:()=>void}) {
   return (
-    <div style={{position:"fixed", inset:0, zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(15, 23, 42, 0.4)", backdropFilter:"blur(4px)"}}>
-      <div className={s.panel} style={{width: 800, maxWidth:"90vw", maxHeight:"85vh", display:"flex", flexDirection:"column", overflow:"hidden", background:"#fff", borderRadius:24, boxShadow:"0 24px 48px rgba(0,0,0,0.2)", padding:0}}>
-        <div style={{padding: 24, borderBottom:"1px solid #E0E7EC", display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-          <div style={{display:"flex", gap:12, alignItems:"center"}}>
-            <span className={s.tag} style={{background: `${grant.accent}1a`, color: grant.accent, fontSize: 12}}>{grant.source}</span>
-            <h2 style={{fontSize: 20, fontWeight: 900, color: "#191C1E", margin:0}}>{grant.title}</h2>
-          </div>
-          <button onClick={onClose} style={{background:"transparent", border:"none", cursor:"pointer", padding:0, display:"flex"}}><MI name="close" size={24} color="#6D797E"/></button>
-        </div>
-        
-        <div style={{display:"flex", flex:1, overflow:"hidden"}}>
-          {/* Main Info */}
-          <div style={{flex: 6, padding: 24, overflowY:"auto", borderRight:"1px solid #E0E7EC"}}>
-            <div style={{display:"flex", justifyContent:"space-between", marginBottom:24}}>
+    <div className={s.panel} style={{ padding: 24, borderRadius: 26 }}>
+      <div style={{ fontWeight: 900, fontSize: 16, color: "#191C1E" }}>Upcoming Deadlines</div>
+      <div style={{ height: 16 }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {items.length === 0 ? (
+          <div style={{ fontSize: 13, color: "#3D494D" }}>No grant deadlines loaded yet.</div>
+        ) : (
+          items.map((match, index) => (
+            <div key={match.grant.id} style={{ display: "flex", gap: 12 }}>
+              <div style={{ width: 3, background: accentForIndex(index), borderRadius: 2 }} />
               <div>
-                <div style={{fontSize:12, color:"#6D797E", fontWeight:700, marginBottom:4}}>GRANT AMOUNT</div>
-                <div style={{fontSize:28, fontWeight:900, color: grant.accent}}>{grant.amount}</div>
-              </div>
-              <div style={{textAlign:"right"}}>
-                <div style={{fontSize:12, color:"#6D797E", fontWeight:700, marginBottom:4}}>STATUS</div>
-                <div style={{fontSize:16, fontWeight:800, color: "#191C1E"}}>{grant.status}</div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#191C1E" }}>{match.grant.title}</div>
+                <div style={{ fontSize: 11, color: accentForIndex(index), fontWeight: 700, marginTop: 2 }}>
+                  {deadlineStatus(match.grant.application_deadline)} ({formatDeadline(match.grant.application_deadline)})
+                </div>
               </div>
             </div>
-            
-            <div style={{fontSize:14, fontWeight:800, color:"#191C1E", marginBottom:8}}>Description</div>
-            <p style={{fontSize:14, color:"#3D494D", lineHeight:1.6, marginBottom:24}}>
-              {grant.desc}
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MetricCards({ rankedGrants, profile, documents }: { rankedGrants: RankedGrantRead[]; profile: CompanyProfileRead | null; documents: DocumentRead[] }) {
+  const readiness = Math.round(profile?.readiness_score ?? rankedGrants[0]?.readiness_score ?? 0);
+  const attention = rankedGrants.filter((match) => match.status !== "ready").length;
+  const generated = documents.filter((document) => document.status === "generated").length;
+
+  return (
+    <div className={s.metricGrid}>
+      <div className={s.metricCard}>
+        <div className={s.metricHeader}><span className={s.metricTitle}>READINESS SCORE</span><MI name="speed" size={16} color="#006780" /></div>
+        <div className={s.metricValue} style={{ fontSize: 34, color: "#006780" }}>{readiness}%</div>
+        <div className={s.metricCaption}>{profile ? "Stored in backend profile" : "Complete setup to improve this score"}</div>
+      </div>
+      <div className={s.metricCard}>
+        <div className={s.metricHeader}><span className={s.metricTitle}>ACTIVE PIPELINE</span><MI name="account_tree" size={16} color="#494BD6" /></div>
+        <div className={s.metricValue} style={{ fontSize: 34, color: "#494BD6" }}>{rankedGrants.length}</div>
+        <div className={s.metricCaption}>{attention} grants requiring attention</div>
+        <div style={{ height: 10 }} />
+        <div className={s.stackedProgress}>
+          <div style={{ flex: Math.max(1, rankedGrants.length - attention), background: "#006780" }} />
+          <div style={{ flex: Math.max(1, attention), background: "#904D00" }} />
+        </div>
+      </div>
+      <div className={s.metricCard}>
+        <div className={s.metricHeader}><span className={s.metricTitle}>DOCUMENT HEALTH</span><MI name="health_and_safety" size={16} color="#904D00" /></div>
+        <div className={s.metricValue} style={{ fontSize: 26, color: "#191C1E" }}>{documents.length ? "Active" : "Empty"}</div>
+        <div className={s.metricCaption}>{documents.length} stored references, {generated} generated</div>
+        <div style={{ height: 10 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><MI name={documents.length ? "check_circle" : "pending"} size={13} color="#006780" /><span style={{ color: "#3D494D", fontSize: 12 }}>{documents.length ? "Backend vault connected" : "Vault setup optional"}</span></div>
+      </div>
+    </div>
+  );
+}
+
+function FeedCard({ match, accent, onViewDetails }: { match: RankedGrantRead; accent: string; onViewDetails: () => void }) {
+  return (
+    <div className={s.panel} style={{ padding: 16, borderRadius: 16, display: "flex", alignItems: "center", gap: 16, background: "#fff", boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}>
+      <div style={{ width: 54, height: 54, borderRadius: "50%", background: `${accent}1f`, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", flexShrink: 0 }}>
+        <span style={{ fontWeight: 900, fontSize: 15, color: accent, lineHeight: 1 }}>{Math.round(match.suitability_score)}%</span>
+        <span style={{ fontSize: 9, fontWeight: 800, color: accent, marginTop: 2 }}>FIT</span>
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className={s.tag} style={{ background: `${accent}1a`, color: accent, fontSize: 10 }}>{match.grant.provider_name}</span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: "#6D797E", letterSpacing: 0.5 }}>{statusLabel(match)}</span>
+        </div>
+        <div style={{ fontSize: 15, fontWeight: 900, color: "#191C1E", marginTop: 8 }}>{match.grant.title}</div>
+        <div style={{ fontSize: 11, color: "#3D494D", marginTop: 4 }}>{formatDeadline(match.grant.application_deadline)}</div>
+      </div>
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: "#006780" }}>{formatAmount(match.grant)}</div>
+        <button className="btn-outline-sm" onClick={onViewDetails} style={{ marginTop: 10, padding: "6px 14px", fontSize: 12 }}>View Details</button>
+      </div>
+    </div>
+  );
+}
+
+function GrantModal({ grant, onClose, onApply }: { grant: RankedGrantRead; onClose: () => void; onApply?: (grantId: number) => void }) {
+  const accent = "#006780";
+  const unmet = grant.evidence_traces.filter((trace) => trace.status !== "MET");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15, 23, 42, 0.4)", backdropFilter: "blur(4px)" }}>
+      <div className={s.panel} style={{ width: 800, maxWidth: "90vw", maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden", background: "#fff", borderRadius: 24, boxShadow: "0 24px 48px rgba(0,0,0,0.2)", padding: 0 }}>
+        <div style={{ padding: 24, borderBottom: "1px solid #E0E7EC", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <span className={s.tag} style={{ background: `${accent}1a`, color: accent, fontSize: 12 }}>{grant.grant.provider_name}</span>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: "#191C1E", margin: 0 }}>{grant.grant.title}</h2>
+          </div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", padding: 0, display: "flex" }}><MI name="close" size={24} color="#6D797E" /></button>
+        </div>
+
+        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+          <div style={{ flex: 6, padding: 24, overflowY: "auto", borderRight: "1px solid #E0E7EC" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24, gap: 20 }}>
+              <div>
+                <div style={{ fontSize: 12, color: "#6D797E", fontWeight: 700, marginBottom: 4 }}>GRANT AMOUNT</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: accent }}>{formatAmount(grant.grant)}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 12, color: "#6D797E", fontWeight: 700, marginBottom: 4 }}>DEADLINE</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#191C1E" }}>{formatDeadline(grant.grant.application_deadline)}</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#191C1E", marginBottom: 8 }}>Description</div>
+            <p style={{ fontSize: 14, color: "#3D494D", lineHeight: 1.6, marginBottom: 24 }}>
+              {grant.grant.description || grant.grant.eligibility_notes || "No description provided by this grant source."}
             </p>
 
-            <div style={{fontSize:14, fontWeight:800, color:"#191C1E", marginBottom:8}}>Application Requirements</div>
-            <ul style={{fontSize:14, color:"#3D494D", lineHeight:1.6, paddingLeft:20, margin:0}}>
-              <li style={{marginBottom:8}}>Detailed Business Plan and Project Roadmap</li>
-              <li style={{marginBottom:8}}>2 Years of Audited Financials</li>
-              <li>Proof of Incorporation and Entity Status</li>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#191C1E", marginBottom: 8 }}>Application Requirements</div>
+            <ul style={{ fontSize: 14, color: "#3D494D", lineHeight: 1.6, paddingLeft: 20, margin: 0 }}>
+              {grant.grant.requirements.length === 0 ? (
+                <li>No explicit requirements captured yet.</li>
+              ) : grant.grant.requirements.map((requirement) => (
+                <li key={requirement.id} style={{ marginBottom: 8 }}>
+                  {requirement.name} ({requirement.source_type === "generated" ? "AI can generate" : "upload required"})
+                </li>
+              ))}
             </ul>
 
-            {grant.link && (
-              <div style={{marginTop: 24}}>
-                <a href={grant.link} target="_blank" rel="noreferrer" style={{display:"inline-flex", alignItems:"center", gap:6, fontSize:14, fontWeight:700, color:"#006780", textDecoration:"none"}}>
-                  <MI name="launch" size={16}/> Official Grant Website
+            {grant.grant.source_url && (
+              <div style={{ marginTop: 24 }}>
+                <a href={grant.grant.source_url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: "#006780", textDecoration: "none" }}>
+                  <MI name="launch" size={16} /> Official Grant Website
                 </a>
               </div>
             )}
           </div>
-          
-          {/* AI Analysis Sidebar */}
-          <div style={{flex: 4, padding: 24, background:"#F8FAFC", overflowY:"auto"}}>
-            <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:20}}>
-              <MI name="auto_awesome" size={20} color="#0087A5"/>
-              <span style={{fontSize:16, fontWeight:900, color:"#0F172A"}}>AI Compatibility Analysis</span>
+
+          <div style={{ flex: 4, padding: 24, background: "#F8FAFC", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
+              <MI name="auto_awesome" size={20} color="#0087A5" />
+              <span style={{ fontSize: 16, fontWeight: 900, color: "#0F172A" }}>Evaluator Analysis</span>
             </div>
-            
-            <div style={{display:"flex", alignItems:"center", gap:16, marginBottom:24}}>
-              <div style={{width: 60, height: 60, borderRadius: "50%", background: `${grant.accent}1f`, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", flexShrink: 0}}>
-                <span style={{fontWeight: 900, fontSize: 18, color: grant.accent, lineHeight: 1}}>{grant.match}%</span>
-                <span style={{fontSize: 9, fontWeight: 800, color: grant.accent, marginTop: 2}}>MATCH</span>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+              <div style={{ width: 60, height: 60, borderRadius: "50%", background: `${accent}1f`, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", flexShrink: 0 }}>
+                <span style={{ fontWeight: 900, fontSize: 18, color: accent, lineHeight: 1 }}>{Math.round(grant.suitability_score)}%</span>
+                <span style={{ fontSize: 9, fontWeight: 800, color: accent, marginTop: 2 }}>MATCH</span>
               </div>
-              <div style={{fontSize:13, color:"#334155", lineHeight:1.5}}>
-                Based on your company profile and uploaded documents, this grant is a <strong>strong match</strong>.
+              <div style={{ fontSize: 13, color: "#334155", lineHeight: 1.5 }}>
+                Readiness: <strong>{grant.readiness_level}</strong>. Track: <strong>{grant.track}</strong>.
               </div>
             </div>
 
-            <div style={{fontSize:12, fontWeight:800, color:"#6D797E", letterSpacing:1, marginBottom:12}}>AI INSIGHTS</div>
-            <div style={{display:"flex", flexDirection:"column", gap:12}}>
-              {grant.aiAnalysis.map((insight, idx) => (
-                <div key={idx} style={{background:"#fff", padding:12, borderRadius:8, display:"flex", gap:10, boxShadow:"0 2px 4px rgba(0,0,0,0.02)", border:"1px solid #E0E7EC"}}>
-                  <div style={{flexShrink:0}}><MI name={insight.icon} size={18} color={insight.color}/></div>
-                  <span style={{fontSize:13, color:"#191C1E", lineHeight:1.4}}>{insight.text}</span>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#6D797E", letterSpacing: 1, marginBottom: 12 }}>WHY THIS RANKED HERE</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {grant.reasons.slice(0, 3).map((reason, index) => (
+                <div key={index} style={{ background: "#fff", padding: 12, borderRadius: 8, display: "flex", gap: 10, boxShadow: "0 2px 4px rgba(0,0,0,0.02)", border: "1px solid #E0E7EC" }}>
+                  <div style={{ flexShrink: 0 }}><MI name="check_circle" size={18} color="#10B981" /></div>
+                  <span style={{ fontSize: 13, color: "#191C1E", lineHeight: 1.4 }}>{reason}</span>
+                </div>
+              ))}
+              {unmet.slice(0, 3).map((trace, index) => (
+                <div key={trace.requirement + index} style={{ background: "#fff", padding: 12, borderRadius: 8, display: "flex", gap: 10, boxShadow: "0 2px 4px rgba(0,0,0,0.02)", border: "1px solid #FCA5A5" }}>
+                  <div style={{ flexShrink: 0 }}><MI name="warning" size={18} color="#F59E0B" /></div>
+                  <span style={{ fontSize: 13, color: "#191C1E", lineHeight: 1.4 }}>{trace.reasoning}</span>
                 </div>
               ))}
             </div>
           </div>
         </div>
-        
-        <div style={{padding: 20, borderTop:"1px solid #E0E7EC", background:"#F8FAFC", display:"flex", justifyContent:"flex-end", gap:12}}>
+
+        <div style={{ padding: 20, borderTop: "1px solid #E0E7EC", background: "#F8FAFC", display: "flex", justifyContent: "flex-end", gap: 12 }}>
           <button className="btn-outline-sm" onClick={onClose}>Close</button>
           <button className="btn-primary" onClick={() => {
-            if (onGenerateRoadmap) onGenerateRoadmap();
+            onApply?.(grant.grant.id);
             onClose();
           }}>
-            <MI name="rocket_launch" size={16}/> Generate Roadmap
+            <MI name="rocket_launch" size={16} /> Open Application
           </button>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export function GrantTab({onApply}:{onApply:()=>void}){
-  return <div style={{overflowY:"auto"}}>
-    <div className={s.pageHeader}>
-      <div style={{display:"flex",alignItems:"center",gap:10}}><MI name="analytics" size={18} color="#904D00"/>
-        <div className={s.pageTitle} style={{fontSize:28}}>Grant Match Details</div>
+export function GrantTab({
+  currentUser,
+  rankedGrants,
+  allGrants = [],
+  focusGrantId,
+  onRefresh,
+}: DashboardDataProps & { focusGrantId?: number | null; onRefresh?: () => void }) {
+  const grantLibrary = allGrants.length > 0 ? allGrants : rankedGrants.map((match) => match.grant);
+  const [selectedGrantId, setSelectedGrantId] = React.useState<number | null>(focusGrantId || rankedGrants[0]?.grant.id || grantLibrary[0]?.id || null);
+  const [snapshot, setSnapshot] = React.useState<GrantApplicationRead | null>(null);
+  const [roadmap, setRoadmap] = React.useState<ApplicationRoadmapRead | null>(null);
+  const [loadingSnapshot, setLoadingSnapshot] = React.useState(false);
+  const [loadingRoadmap, setLoadingRoadmap] = React.useState(false);
+  const [actionStatus, setActionStatus] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [scoutStatus, setScoutStatus] = React.useState<ScoutStatusRead | null>(null);
+  const [scoutRunning, setScoutRunning] = React.useState(false);
+  const [uploadingRequirementId, setUploadingRequirementId] = React.useState<number | null>(null);
+
+  const effectiveGrantId = selectedGrantId ?? focusGrantId ?? rankedGrants[0]?.grant.id ?? grantLibrary[0]?.id ?? null;
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (!currentUser || !effectiveGrantId) {
+        setSnapshot(null);
+        setRoadmap(null);
+        return;
+      }
+      setLoadingSnapshot(true);
+      setError("");
+      getGrantApplication(effectiveGrantId, currentUser.id)
+        .then((result) => {
+          if (!cancelled) setSnapshot(result);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load application checklist.");
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingSnapshot(false);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [currentUser, effectiveGrantId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (!currentUser || !effectiveGrantId) {
+        setRoadmap(null);
+        return;
+      }
+      setLoadingRoadmap(true);
+      getApplicationRoadmap(effectiveGrantId, currentUser.id)
+        .then((result) => {
+          if (!cancelled) setRoadmap(result);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setRoadmap(null);
+            setError(err instanceof Error ? err.message : "Unable to load Coach Agent roadmap.");
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoadingRoadmap(false);
+        });
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [currentUser, effectiveGrantId]);
+
+  const selectedMatch = rankedGrants.find((match) => match.grant.id === effectiveGrantId) || null;
+  const selectedGrant = selectedMatch?.grant || grantLibrary.find((grant) => grant.id === effectiveGrantId) || rankedGrants[0]?.grant || grantLibrary[0] || null;
+
+  const refreshSnapshot = async () => {
+    if (!currentUser || !effectiveGrantId) return;
+    const next = await getGrantApplication(effectiveGrantId, currentUser.id);
+    setSnapshot(next);
+    setLoadingRoadmap(true);
+    void getApplicationRoadmap(effectiveGrantId, currentUser.id)
+      .then(setRoadmap)
+      .catch(() => setRoadmap(null))
+      .finally(() => setLoadingRoadmap(false));
+    onRefresh?.();
+  };
+
+  const handleGenerate = async (item: GrantApplicationRead["checklist"][number]) => {
+    if (!currentUser || !effectiveGrantId) return;
+    setActionStatus(`Generating ${item.name}...`);
+    setError("");
+    try {
+      if (item.document_type === "pitch_deck") {
+        await generatePitchDeck({ grantId: effectiveGrantId, userId: currentUser.id, creative: false });
+      } else {
+        await generateApplicationDocument({
+          grantId: effectiveGrantId,
+          userId: currentUser.id,
+          requirementId: item.requirement_id,
+          documentType: item.document_type,
+          documentName: item.name,
+        });
+      }
+      setActionStatus(`${item.name} generated and stored.`);
+      await refreshSnapshot();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to generate document.");
+      setActionStatus("");
+    }
+  };
+
+  const handleRunDrafterBundle = async () => {
+    if (!currentUser || !effectiveGrantId) return;
+    setActionStatus("Running Drafter Agent...");
+    setError("");
+    try {
+      const result = await draftApplicationBundle({ grantId: effectiveGrantId, userId: currentUser.id });
+      const pptx = result.generated_documents.find((document) => document.file_name.toLowerCase().endsWith(".pptx"));
+      const proposal = result.generated_documents.find((document) => document.file_name.toLowerCase().endsWith(".pdf"));
+      setActionStatus(
+        `Drafter Agent generated a professional proposal${proposal ? " PDF" : ""}, ${pptx ? "downloadable PPTX pitch deck" : "pitch deck"}, and companion script. Download them below.`,
+      );
+      await refreshSnapshot();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to run Drafter Agent.");
+      setActionStatus("");
+    }
+  };
+
+  const handleUploadDocument = async (item: GrantApplicationRead["checklist"][number], file: File) => {
+    if (!currentUser || !effectiveGrantId) return;
+    setUploadingRequirementId(item.requirement_id);
+    setActionStatus(`Uploading ${file.name}...`);
+    setError("");
+    try {
+      await uploadApplicationDocument({
+        grantId: effectiveGrantId,
+        userId: currentUser.id,
+        file,
+        documentType: item.document_type,
+        documentName: item.name,
+        requirementId: item.requirement_id,
+      });
+      setActionStatus(`${file.name} uploaded and linked to ${item.name}.`);
+      await refreshSnapshot();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to upload document.");
+      setActionStatus("");
+    } finally {
+      setUploadingRequirementId(null);
+    }
+  };
+
+  const handleRunScoutAgent = async () => {
+    setScoutRunning(true);
+    setActionStatus("Running Scout Agent on curated grant files...");
+    setError("");
+    try {
+      const report = await runScoutAgent();
+      const grantsExtracted = typeof report.grants_extracted === "number" ? report.grants_extracted : "new";
+      setActionStatus(`Scout Agent synced ${grantsExtracted} grant record(s) into the database.`);
+      setScoutStatus(await getScoutStatus());
+      await onRefresh?.();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to run Scout Agent.");
+      setActionStatus("");
+    } finally {
+      setScoutRunning(false);
+    }
+  };
+
+  if (!currentUser) return <EmptyState title="No workspace session" body="Log in before opening an application checklist." actionHref="/login" actionLabel="Login" />;
+
+  return (
+    <div style={{ overflowY: "auto" }}>
+      <div className={s.pageHeader}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}><MI name="analytics" size={18} color="#904D00" />
+          <div className={s.pageTitle} style={{ fontSize: 28 }}>Grant Match Details</div>
+        </div>
+        <div className={s.pageSub}>Live backend grant rankings, application checklist, generated documents, and submission package links.</div>
       </div>
-      <div className={s.pageSub}>We analyzed 42 active funding sources against your profile. Here is why you match with this grant.</div>
-    </div>
-    <div style={{height:16}}/>
-    <div className={s.grantLayout}>
-      <div className={s.grantMain}>
-        <div className={s.panel} style={{borderRadius:26,padding:18}}>
-          <div style={{display:"flex",gap:16}}>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                <span className={s.tag} style={{background:"#F2F4F6",color:"#3D494D"}}>DOE - EERE</span>
-                <span className={s.tag} style={{background:"#EDEBFF",color:"#494BD6"}}><MI name="auto_awesome" size={12} color="#494BD6"/>High Confidence</span>
+      <div style={{ height: 16 }} />
+
+      {error && <InlineNotice tone="error" text={error} />}
+      {actionStatus && <InlineNotice tone="info" text={actionStatus} />}
+
+      <div className={s.grantLayout}>
+        <div className={s.grantMain}>
+          {selectedGrant ? (
+            <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
+              <div style={{ display: "flex", gap: 16 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <span className={s.tag} style={{ background: "#F2F4F6", color: "#3D494D" }}>{selectedGrant.provider_name}</span>
+                    {selectedMatch ? (
+                      <span className={s.tag} style={{ background: "#EDEBFF", color: "#494BD6" }}><MI name="auto_awesome" size={12} color="#494BD6" />{selectedMatch.readiness_level}</span>
+                    ) : (
+                      <span className={s.tag} style={{ background: grantStatusTone(selectedGrant.status).background, color: grantStatusTone(selectedGrant.status).color }}><MI name={grantStatusTone(selectedGrant.status).icon} size={12} color={grantStatusTone(selectedGrant.status).color} />{formatGrantStatus(selectedGrant.status)}</span>
+                    )}
+                  </div>
+                  <div style={{ height: 12 }} />
+                  <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.12, letterSpacing: -0.5, color: "#191C1E" }}>{selectedGrant.title}</div>
+                  <div style={{ height: 8 }} />
+                  <div style={{ color: "#3D494D", fontSize: 13 }}>Deadline: {formatDeadline(selectedGrant.application_deadline)}</div>
+                </div>
+                {selectedMatch ? (
+                  <div style={{ width: 76, height: 76, borderRadius: "50%", background: "#FFDDB6", border: "1px solid rgba(144,77,0,0.14)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: "#904D00", letterSpacing: -1 }}>{Math.round(selectedMatch.suitability_score)}%</div>
+                    <div style={{ fontSize: 9, fontWeight: 800, color: "#904D00", letterSpacing: 2 }}>MATCH</div>
+                  </div>
+                ) : (
+                  <div style={{ width: 76, height: 76, borderRadius: "50%", background: "#F2F4F6", border: "1px solid rgba(224,231,236,0.9)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <MI name="inventory_2" size={24} color="#5F6E84" />
+                    <div style={{ fontSize: 9, fontWeight: 800, color: "#5F6E84", letterSpacing: 1 }}>LIBRARY</div>
+                  </div>
+                )}
               </div>
-              <div style={{height:12}}/>
-              <div style={{fontSize:20,fontWeight:900,lineHeight:1.12,letterSpacing:-0.5,color:"#191C1E"}}>Clean Energy Infrastructure Deployment Grant</div>
-              <div style={{height:8}}/>
-              <div style={{color:"#3D494D",fontSize:13}}>FOA-0002894 - Deadline: Oct 15, 2024</div>
-            </div>
-            <div style={{width:76,height:76,borderRadius:"50%",background:"#FFDDB6",border:"1px solid rgba(144,77,0,0.14)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <div style={{fontSize:24,fontWeight:900,color:"#904D00",letterSpacing:-1}}>94%</div>
-              <div style={{fontSize:9,fontWeight:800,color:"#904D00",letterSpacing:2}}>MATCH</div>
-            </div>
+              <div style={{ height: 20 }} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}><MI name="verified" size={14} color="#904D00" /><span style={{ fontWeight: 900, letterSpacing: 1, fontSize: 12, color: "#191C1E" }}>WHY YOU ARE A FIT</span></div>
+                  <div style={{ height: 10 }} />
+                  {selectedMatch ? (
+                    selectedMatch.reasons.slice(0, 3).map((reason, index) => (
+                      <div key={index} className={s.evidenceTile}><div className={s.evidenceIcon} style={{ background: "rgba(0,103,128,0.12)" }}><MI name="check_circle" size={14} color="#006780" /></div><div><div style={{ fontWeight: 700, color: "#191C1E", fontSize: 13 }}>{reason}</div></div></div>
+                    ))
+                  ) : (
+                    <div className={s.evidenceTile}><div className={s.evidenceIcon} style={{ background: "rgba(95,110,132,0.12)" }}><MI name="inventory_2" size={14} color="#5F6E84" /></div><div><div style={{ fontWeight: 700, color: "#191C1E", fontSize: 13 }}>This grant is from the complete library. Update the company profile to include it in ranked matching if it is eligible.</div></div></div>
+                  )}
+                </div>
+                <div>
+                  <div className={s.gapPanel}><MI name="assignment" size={14} color="#BA1A1A" /><div><div style={{ color: "#BA1A1A", fontWeight: 900, letterSpacing: 1, fontSize: 12 }}>APPLICATION CHECKLIST</div><div style={{ height: 8 }} /><div style={{ color: "#93000A", lineHeight: 1.4, fontSize: 13 }}>{snapshot ? `${snapshot.missing_required_documents.length} missing required item(s). Track: ${snapshot.track}.` : loadingSnapshot ? "Loading checklist..." : "Select a grant to load its checklist."}</div></div></div>
+                  <div style={{ height: 18 }} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <button className="btn-primary" onClick={handleRunDrafterBundle} disabled={!snapshot || loadingSnapshot} style={{ opacity: !snapshot || loadingSnapshot ? 0.65 : 1 }}>
+              <MI name="auto_awesome" size={16} color="#fff" />Run Drafter Agent
+            </button>
+            {snapshot?.download_package_url && (
+              <a href={backendDownloadUrl(snapshot.download_package_url)} className="btn-amber" style={{ textDecoration: "none" }}>
+                <MI name="archive" size={16} color="#fff" />Download Package
+              </a>
+            )}
           </div>
-          <div style={{height:20}}/>
-          <div style={{display:"flex",gap:20}}>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}><MI name="verified" size={14} color="#904D00"/><span style={{fontWeight:900,letterSpacing:1,fontSize:12,color:"#191C1E"}}>WHY YOU&apos;RE A STRONG FIT</span></div>
-              <div style={{height:10}}/>
-              <div className={s.evidenceTile}><div className={s.evidenceIcon} style={{background:"rgba(0,103,128,0.12)"}}><MI name="eco" size={14} color="#006780"/></div><div><div style={{fontWeight:700,color:"#191C1E",fontSize:13}}>{"Aligns with 'Decarbonization'"}</div><div style={{height:4}}/><div style={{color:"#3D494D",lineHeight:1.4,fontSize:12}}>{'Your past project "Solar Grid V2" proves you have the required experience.'}</div></div></div>
-              <div className={s.evidenceTile}><div className={s.evidenceIcon} style={{background:"rgba(0,103,128,0.12)"}}><MI name="groups" size={14} color="#006780"/></div><div><div style={{fontWeight:700,color:"#191C1E",fontSize:13}}>Community Benefit Confirmed</div><div style={{height:4}}/><div style={{color:"#3D494D",lineHeight:1.4,fontSize:12}}>You already partner with 3 local workforce development boards.</div></div></div>
+                </div>
+              </div>
             </div>
-            <div style={{flex:1}}>
-              <div className={s.gapPanel}><MI name="error" size={14} color="#BA1A1A"/><div><div style={{color:"#BA1A1A",fontWeight:900,letterSpacing:1,fontSize:12}}>WHAT&apos;S MISSING</div><div style={{height:8}}/><div style={{color:"#93000A",lineHeight:1.4,fontSize:13}}>Export Compliance Certificate (Form 89-B). We need this before we can submit.</div></div></div>
-              <div style={{height:18}}/>
-              <div style={{textAlign:"center",color:"#3D494D",fontSize:12,lineHeight:1.4}}>Ready to start? We&apos;ll automatically draft your proposal steps.</div>
-              <div style={{height:10}}/>
-              <button className="btn-amber" onClick={onApply}><MI name="route" size={16} color="#fff"/>Start Application</button>
-            </div>
-          </div>
+          ) : (
+            <EmptyState title="No grants available" body="Start the backend to seed grant data, then refresh this dashboard." actionHref="/dashboard" actionLabel="Refresh" />
+          )}
+
+          <div style={{ height: 16 }} />
+          <ApplicationRoadmap roadmap={roadmap} loading={loadingRoadmap} />
+          <div style={{ height: 16 }} />
+          <ApplicationChecklist
+            snapshot={snapshot}
+            loading={loadingSnapshot}
+            uploadingRequirementId={uploadingRequirementId}
+            onGenerate={handleGenerate}
+            onUpload={handleUploadDocument}
+          />
+          <div style={{ height: 16 }} />
+          <GeneratedOutputs snapshot={snapshot} currentUser={currentUser} grantId={effectiveGrantId} />
+          <div style={{ height: 16 }} />
+          <GrantLibrary
+            grants={grantLibrary}
+            rankedGrants={rankedGrants}
+            selectedGrantId={selectedGrant?.id ?? effectiveGrantId}
+            scoutStatus={scoutStatus}
+            scoutRunning={scoutRunning}
+            onRunScout={handleRunScoutAgent}
+            onOpen={(grantId) => setSelectedGrantId(grantId)}
+          />
         </div>
-      </div>
-      <div className={s.grantSide}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}><span style={{fontWeight:900,letterSpacing:2,fontSize:12,color:"#191C1E"}}>OTHER HIGH MATCHES</span><span style={{color:"#904D00",fontWeight:700,fontSize:12}}>View All</span></div>
-        <MatchCard source="NSF - Convergence Accelerator" title="Sustainable Materials Development" score="88%" body="Strong patent overlap detected in polymer synthesis sub-category." onApply={onApply}/>
-        <MatchCard source="NIH - R01 Research" title="Advanced Biomarkers for Early Detection" score="82%" body="Gap: Lacking required preliminary in-vivo data subset." hasGap onApply={onApply}/>
-        <div className={s.connectCard}>
-          <div style={{width:30,height:30,borderRadius:"50%",background:"#F2F4F6",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><MI name="add_link" size={15} color="#3D494D"/></div>
-          <div style={{height:10}}/>
-          <div style={{fontWeight:900,fontSize:13,color:"#191C1E"}}>Connect New Data Source</div>
-          <div style={{height:4}}/>
-          <div style={{color:"#3D494D",fontSize:12}}>Expand evaluation context</div>
+
+        <div className={s.grantSide}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}><span style={{ fontWeight: 900, letterSpacing: 2, fontSize: 12, color: "#191C1E" }}>RANKED PROFILE MATCHES</span><span style={{ color: "#904D00", fontWeight: 700, fontSize: 12 }}>{rankedGrants.length} total</span></div>
+          {rankedGrants.length === 0 ? (
+            <div className={s.matchCard} style={{ color: "#3D494D", fontSize: 13, lineHeight: 1.45 }}>No ranked matches yet. Complete or refresh the company profile to score grants against your SME readiness.</div>
+          ) : (
+            rankedGrants.map((match) => (
+              <MatchCard key={match.grant.id} match={match} selected={effectiveGrantId === match.grant.id} onApply={() => setSelectedGrantId(match.grant.id)} />
+            ))
+          )}
+          <Link href="/business-fundamentals" className={s.connectCard} style={{ display: "block", textDecoration: "none" }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#F2F4F6", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><MI name="add_link" size={15} color="#3D494D" /></div>
+            <div style={{ height: 10 }} />
+            <div style={{ fontWeight: 900, fontSize: 13, color: "#191C1E" }}>Update Profile Inputs</div>
+            <div style={{ height: 4 }} />
+            <div style={{ color: "#3D494D", fontSize: 12 }}>Improve evaluation context</div>
+          </Link>
         </div>
       </div>
     </div>
-  </div>;
+  );
 }
 
-function MatchCard({source,title,score,body,hasGap,onApply}:{source:string;title:string;score:string;body:string;hasGap?:boolean;onApply:()=>void}){
-  return <div className={s.matchCard}>
-    <div style={{display:"flex",justifyContent:"space-between"}}><span style={{color:"#3D494D",fontWeight:600,fontSize:12}}>{source}</span><span className={s.tag} style={{background:"#F2F4F6",color:"#006780"}}>{score}</span></div>
-    <div style={{height:10}}/>
-    <div style={{fontSize:14,fontWeight:900,lineHeight:1.15,color:"#191C1E"}}>{title}</div>
-    <div style={{height:10}}/>
-    <div style={{display:"flex",gap:8,alignItems:"flex-start"}}><div style={{width:5,height:5,borderRadius:"50%",background:hasGap?"#BA1A1A":"#494BD6",marginTop:6,flexShrink:0}}/><span style={{color:hasGap?"#7D1A1A":"#3D494D",lineHeight:1.35,fontSize:12}}>{body}</span></div>
-    <div style={{height:10,display:"flex",justifyContent:"flex-end"}}/>
-    <div style={{display:"flex",justifyContent:"flex-end"}}><button className="btn-soft" onClick={onApply}><MI name="route" size={14}/>Apply</button></div>
-  </div>;
+function GrantLibrary({
+  grants,
+  rankedGrants,
+  selectedGrantId,
+  scoutStatus,
+  scoutRunning,
+  onRunScout,
+  onOpen,
+}: {
+  grants: GrantRead[];
+  rankedGrants: RankedGrantRead[];
+  selectedGrantId?: number | null;
+  scoutStatus: ScoutStatusRead | null;
+  scoutRunning: boolean;
+  onRunScout: () => void;
+  onOpen: (grantId: number) => void;
+}) {
+  const openCount = grants.filter((grant) => grant.status.toLowerCase() === "open").length;
+  const closedCount = grants.filter((grant) => grant.status.toLowerCase() === "closed").length;
+  const otherCount = Math.max(0, grants.length - openCount - closedCount);
+  const rankedLookup = new Map<number, { match: RankedGrantRead; rank: number }>(
+    rankedGrants.map((match, index): [number, { match: RankedGrantRead; rank: number }] => [match.grant.id, { match, rank: index + 1 }]),
+  );
+
+  return (
+    <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MI name="inventory_2" size={17} color="#006780" />
+            <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E" }}>COMPLETE GRANT LIBRARY</div>
+          </div>
+          <div style={{ color: "#3D494D", fontSize: 12, marginTop: 5 }}>
+            Scout Agent syncs curated grant files into the database; Evaluator turns each grant's requirements into a checklist.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <span className={s.tag} style={{ background: "#F2F4F6", color: "#191C1E" }}>{grants.length} total</span>
+          <span className={s.tag} style={{ background: "#EAF8FC", color: "#006780" }}>{openCount} open</span>
+          <span className={s.tag} style={{ background: "#F2F4F6", color: "#5F6E84" }}>{closedCount} closed</span>
+          {otherCount > 0 && <span className={s.tag} style={{ background: "#FFF4E5", color: "#904D00" }}>{otherCount} unknown</span>}
+          <button className="btn-primary" onClick={onRunScout} disabled={scoutRunning} style={{ fontSize: 12, opacity: scoutRunning ? 0.7 : 1 }}>
+            <MI name="travel_explore" size={14} color="#fff" />{scoutRunning ? "Syncing" : "Run Scout"}
+          </button>
+        </div>
+      </div>
+      {scoutStatus?.message && (
+        <div style={{ marginTop: 12, color: "#3D494D", fontSize: 12 }}>
+          Scout status: <strong>{scoutStatus.status}</strong> - {scoutStatus.message}
+        </div>
+      )}
+
+      <div style={{ height: 16 }} />
+      {grants.length === 0 ? (
+        <div style={{ color: "#3D494D", fontSize: 13 }}>No grants are stored yet. Run the Scout Agent or seed the backend database to fill the library.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {grants.map((grant) => {
+            const tone = grantStatusTone(grant.status);
+            const ranked = rankedLookup.get(grant.id);
+            const selected = selectedGrantId === grant.id;
+            return (
+              <div key={grant.id} style={{ padding: 14, border: `1px solid ${selected ? "#00B4D8" : "#E0E7EC"}`, borderRadius: 14, background: selected ? "#F2FBFE" : "#fff", display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 14, alignItems: "center" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span className={s.tag} style={{ background: "#F2F4F6", color: "#3D494D" }}>{grant.provider_name}</span>
+                    <span className={s.tag} style={{ background: tone.background, color: tone.color, border: `1px solid ${tone.border}` }}><MI name={tone.icon} size={12} color={tone.color} />{formatGrantStatus(grant.status)}</span>
+                    {ranked && <span className={s.tag} style={{ background: "#FFF4E5", color: "#904D00" }}>Rank #{ranked.rank} - {Math.round(ranked.match.suitability_score)}%</span>}
+                  </div>
+                  <div style={{ height: 8 }} />
+                  <div style={{ fontSize: 15, fontWeight: 900, color: "#191C1E", lineHeight: 1.25, overflowWrap: "anywhere" }}>{grant.title}</div>
+                  <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45, marginTop: 6 }}>
+                    {grant.description || grant.eligibility_notes || "No description captured yet."}
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 10, color: "#5F6E84", fontSize: 12, fontWeight: 700 }}>
+                    <span>{formatAmount(grant)}</span>
+                    <span>{formatDeadline(grant.application_deadline)}</span>
+                    {grant.industry && <span>{grant.industry}</span>}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {grant.source_url && (
+                    <a href={grant.source_url} target="_blank" rel="noreferrer" className="btn-soft" style={{ fontSize: 12, textDecoration: "none" }}><MI name="launch" size={14} />Source</a>
+                  )}
+                  <button className={selected ? "btn-primary" : "btn-outline-sm"} onClick={() => onOpen(grant.id)} style={{ fontSize: 12 }}>
+                    <MI name={selected ? "check" : "open_in_new"} size={14} color={selected ? "#fff" : undefined} />Open
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function roadmapTone(status: string): { color: string; background: string; icon: string; label: string } {
+  const normalized = status.toLowerCase();
+  if (normalized === "complete") return { color: "#059669", background: "#ECFDF5", icon: "check_circle", label: "Complete" };
+  if (normalized === "ready" || normalized === "ready_to_generate") return { color: "#494BD6", background: "#EDEBFF", icon: "auto_awesome", label: normalized === "ready" ? "Ready" : "Generate" };
+  if (normalized === "needs_upload") return { color: "#904D00", background: "#FFF4E5", icon: "upload_file", label: "Upload" };
+  if (normalized === "blocked") return { color: "#BA1A1A", background: "#FFF0F0", icon: "lock", label: "Blocked" };
+  return { color: "#5F6E84", background: "#F2F4F6", icon: "schedule", label: "Pending" };
+}
+
+function ApplicationRoadmap({ roadmap, loading }: { roadmap: ApplicationRoadmapRead | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className={s.panel} style={{ borderRadius: 26, padding: 18, color: "#3D494D", fontSize: 13 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <MI name="route" size={17} color="#006780" />
+          <strong style={{ color: "#191C1E" }}>Coach Agent Application Roadmap</strong>
+        </div>
+        <div style={{ marginTop: 10 }}>Generating a grant application pipeline...</div>
+      </div>
+    );
+  }
+
+  if (!roadmap) {
+    return (
+      <div className={s.panel} style={{ borderRadius: 26, padding: 18, color: "#3D494D", fontSize: 13 }}>
+        Coach Agent roadmap will appear after the grant application checklist loads.
+      </div>
+    );
+  }
+
+  return (
+    <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MI name="route" size={17} color="#006780" />
+            <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E" }}>COACH AGENT APPLICATION ROADMAP</div>
+          </div>
+          <div style={{ color: "#3D494D", fontSize: 12, marginTop: 5 }}>
+            {roadmap.encouraging_message}
+          </div>
+        </div>
+        <span className={s.tag} style={{ background: "#EAF8FC", color: "#006780" }}>
+          {roadmap.generated_by === "zai_coach_agent" ? "ZAI Coach" : "Coach fallback"}
+        </span>
+      </div>
+      <div style={{ height: 16 }} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {roadmap.steps.map((step, index) => {
+          const tone = roadmapTone(step.status);
+          const isLast = index === roadmap.steps.length - 1;
+          return (
+            <div key={`${step.step_number}-${step.title}`} style={{ display: "grid", gridTemplateColumns: "34px minmax(0, 1fr)", gap: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <div style={{ width: 30, height: 30, borderRadius: "50%", background: tone.background, color: tone.color, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tone.color}30` }}>
+                  <MI name={tone.icon} size={16} color={tone.color} />
+                </div>
+                {!isLast && <div style={{ width: 2, flex: 1, minHeight: 42, background: "#E0E7EC", marginTop: 6 }} />}
+              </div>
+              <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 900, color: "#191C1E", lineHeight: 1.3 }}>
+                      {step.step_number}. {step.title}
+                    </div>
+                    <div style={{ color: "#5F6E84", fontSize: 11, marginTop: 3 }}>Owner: {step.owner}</div>
+                  </div>
+                  <span className={s.tag} style={{ background: tone.background, color: tone.color }}>{tone.label}</span>
+                </div>
+                <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45, marginTop: 8 }}>{step.description}</div>
+                <div style={{ color: "#191C1E", fontSize: 12, lineHeight: 1.45, marginTop: 8, fontWeight: 700 }}>{step.action}</div>
+                {step.download_url && (
+                  <a href={backendDownloadUrl(step.download_url)} className="btn-soft" style={{ textDecoration: "none", fontSize: 12, marginTop: 10, display: "inline-flex" }}>
+                    <MI name="download" size={14} />Download
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function GeneratedOutputs({
+  snapshot,
+  currentUser,
+  grantId,
+}: {
+  snapshot: GrantApplicationRead | null;
+  currentUser: UserRead | null;
+  grantId: number | null;
+}) {
+  const generated = snapshot?.generated_documents || [];
+  if (!snapshot || !currentUser || !grantId || generated.length === 0) return null;
+
+  const iconForDocument = (document: DocumentRead): string => {
+    if (document.file_name.toLowerCase().endsWith(".pptx")) return "slideshow";
+    if (document.file_name.toLowerCase().endsWith(".pdf")) return "picture_as_pdf";
+    if (document.document_type === "presentation_script") return "notes";
+    return "description";
+  };
+
+  return (
+    <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
+      <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E", marginBottom: 14 }}>DRAFTER AGENT OUTPUTS</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        {generated.map((document) => (
+          <a
+            key={document.id}
+            href={backendDownloadUrl(`/grants/${grantId}/application/${currentUser.id}/documents/${document.id}/download`)}
+            className="btn-soft"
+            style={{ justifyContent: "flex-start", textDecoration: "none", fontSize: 12, minHeight: 44 }}
+          >
+            <MI name={iconForDocument(document)} size={15} />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{document.file_name}</span>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ApplicationChecklist({
+  snapshot,
+  loading,
+  uploadingRequirementId,
+  onGenerate,
+  onUpload,
+}: {
+  snapshot: GrantApplicationRead | null;
+  loading: boolean;
+  uploadingRequirementId?: number | null;
+  onGenerate: (item: GrantApplicationRead["checklist"][number]) => void;
+  onUpload: (item: GrantApplicationRead["checklist"][number], file: File) => void;
+}) {
+  const inputRefs = React.useRef<Record<number, HTMLInputElement | null>>({});
+
+  return (
+    <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
+      <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E", marginBottom: 14 }}>EVALUATOR AGENT CHECKLIST</div>
+      {loading ? (
+        <div style={{ color: "#3D494D", fontSize: 13 }}>Loading checklist...</div>
+      ) : !snapshot ? (
+        <div style={{ color: "#3D494D", fontSize: 13 }}>No application snapshot loaded.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {snapshot.checklist.map((item) => (
+            <div key={item.requirement_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, border: "1px solid #E0E7EC", borderRadius: 14, background: item.fulfilled ? "#F0FDF4" : "#fff" }}>
+              <MI name={item.fulfilled ? "check_circle" : item.can_generate ? "auto_awesome" : "upload_file"} size={20} color={item.fulfilled ? "#10B981" : item.can_generate ? "#494BD6" : "#904D00"} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#191C1E" }}>{item.name}</div>
+                <div style={{ fontSize: 11, color: "#3D494D", marginTop: 3 }}>{item.action_label}</div>
+              </div>
+              {item.download_url ? (
+                <a href={backendDownloadUrl(item.download_url)} className="btn-soft" style={{ fontSize: 12, textDecoration: "none" }}><MI name="download" size={14} />Download</a>
+              ) : item.can_generate ? (
+                <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => onGenerate(item)}><MI name="auto_awesome" size={14} />Generate</button>
+              ) : (
+                <>
+                  <input
+                    ref={(element) => {
+                      inputRefs.current[item.requirement_id] = element;
+                    }}
+                    type="file"
+                    style={{ display: "none" }}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) onUpload(item, file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-soft"
+                    style={{ fontSize: 12 }}
+                    disabled={uploadingRequirementId === item.requirement_id}
+                    onClick={() => inputRefs.current[item.requirement_id]?.click()}
+                  >
+                    <MI name="upload" size={14} />
+                    {uploadingRequirementId === item.requirement_id ? "Uploading" : "Upload"}
+                  </button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchCard({ match, selected, onApply }: { match: RankedGrantRead; selected?: boolean; onApply: () => void }) {
+  const unmet = match.evidence_traces.some((trace) => trace.status !== "MET");
+  return (
+    <div className={s.matchCard} style={{ borderColor: selected ? "#00B4D8" : undefined }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}><span style={{ color: "#3D494D", fontWeight: 600, fontSize: 12 }}>{match.grant.provider_name}</span><span className={s.tag} style={{ background: "#F2F4F6", color: "#006780" }}>{Math.round(match.suitability_score)}%</span></div>
+      <div style={{ height: 10 }} />
+      <div style={{ fontSize: 14, fontWeight: 900, lineHeight: 1.15, color: "#191C1E" }}>{match.grant.title}</div>
+      <div style={{ height: 10 }} />
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}><div style={{ width: 5, height: 5, borderRadius: "50%", background: unmet ? "#BA1A1A" : "#494BD6", marginTop: 6, flexShrink: 0 }} /><span style={{ color: unmet ? "#7D1A1A" : "#3D494D", lineHeight: 1.35, fontSize: 12 }}>{deadlineStatus(match.grant.application_deadline)} - {statusLabel(match)}</span></div>
+      <div style={{ height: 10, display: "flex", justifyContent: "flex-end" }} />
+      <div style={{ display: "flex", justifyContent: "flex-end" }}><button className="btn-soft" onClick={onApply}><MI name="route" size={14} />Open</button></div>
+    </div>
+  );
 }
