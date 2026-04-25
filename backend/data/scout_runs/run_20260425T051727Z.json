@@ -1,0 +1,97 @@
+[
+  {
+    "title": "DIGITAL CONTENT GRANT (DCG)",
+    "provider_name": "Malaysia Digital Economy Corporation (MDEC)",
+    "source_url": "https://www.mdec.my/grants/dcg",
+    "description": "DIGITAL CONTENT GRANTS GRANT TYPE THE MINI GRANT The grant is aimed to support the development, production and commercialisation of digital content products with the ceiling amount of RM150,000.00.",
+    "amount_min": 1000.0,
+    "amount_max": 500000.0,
+    "nationality": "Malaysia",
+    "industry": "Digital economy",
+    "eligibility_notes": null,
+    "application_deadline": null,
+    "status": "unknown",
+    "metadata_json": {
+      "source_name": "mdec-grants",
+      "extraction_mode": "fallback_regex",
+      "fallback_reason": "Z.AI authentication failed with 401. Check ZAI_API_KEY in .env."
+    },
+    "requirements": []
+  },
+  {
+    "title": "MALAYSIA DIGITAL X-PORT GRANT (MDXG)",
+    "provider_name": "Malaysia Digital Economy Corporation (MDEC)",
+    "source_url": "https://www.mdec.my/grants/mdxg",
+    "description": "The grant aims to stimulate high-value digital exports that lead to the development and commercialisation of market-driven, disruptive, innovative, and sustainable products or services for the global market.",
+    "amount_min": 50000.0,
+    "amount_max": 1000000.0,
+    "nationality": "Malaysia",
+    "industry": "Digital economy",
+    "eligibility_notes": null,
+    "application_deadline": null,
+    "status": "closed",
+    "metadata_json": {
+      "source_name": "mdec-grants",
+      "extraction_mode": "fallback_regex",
+      "fallback_reason": "Z.AI authentication failed with 401. Check ZAI_API_KEY in .env."
+    },
+    "requirements": []
+  },
+  {
+    "title": "MALAYSIA DIGITAL CATALYST GRANT (MDCG)",
+    "provider_name": "Malaysia Digital Economy Corporation (MDEC)",
+    "source_url": "https://www.mdec.my/grants/mdcg",
+    "description": "APPLY NOW Malaysia Digital CATALYST GRANT (MDCG) HARNESSING INNOVATION FOR THE FUTURE Empowering Malaysia into a progressive, digitally-led economy and shaping a digital future in the tech ecosystem.",
+    "amount_min": 50000.0,
+    "amount_max": 1000000.0,
+    "nationality": "Malaysia",
+    "industry": "Digital economy",
+    "eligibility_notes": null,
+    "application_deadline": null,
+    "status": "unknown",
+    "metadata_json": {
+      "source_name": "mdec-grants",
+      "extraction_mode": "fallback_regex",
+      "fallback_reason": "Z.AI authentication failed with 401. Check ZAI_API_KEY in .env."
+    },
+    "requirements": []
+  },
+  {
+    "title": "MALAYSIA DIGITAL ACCELERATION GRANT (MDAG)",
+    "provider_name": "Malaysia Digital Economy Corporation (MDEC)",
+    "source_url": "https://www.mdec.my/grants/mdag",
+    "description": "Malaysia Digital Acceleration Grant intent is to accelerate the growth of Malaysia Digital Status companies that are in commercialisation and expansion stages to become regional champions and is aligned with Malaysia Digital promoted sectors and tech enablers.",
+    "amount_min": 5000000.0,
+    "amount_max": 50000000000.0,
+    "nationality": "Malaysia",
+    "industry": "Digital economy",
+    "eligibility_notes": null,
+    "application_deadline": "28 July 2023 Malaysia Digital Acceleration Grant Accelerating Growth and Expansion of Mature Digital Technology Application Closed Application open until 28 July 2023 Malaysia Digital Acceleration Grant Accelerating Growth and Expansion of Mature Digital Technology Application Closed Application open until 28 July 2023 What is Malaysia Digital Acceleration Grant? Malaysia Digital Acceleration Grant intent is to accelerate the growth of Malaysia Digital Status companies that are in commercialisation and expansion stages to become regional champions and is aligned with Malaysia Digital promoted sectors and tech enablers",
+    "status": "closed",
+    "metadata_json": {
+      "source_name": "mdec-grants",
+      "extraction_mode": "fallback_regex",
+      "fallback_reason": "Z.AI authentication failed with 401. Check ZAI_API_KEY in .env."
+    },
+    "requirements": []
+  },
+  {
+    "title": "MALAYSIA DIGITAL ACCELERATION GRANT - ARTIFICIAL INTELLIGENCE (MDAG-AI)",
+    "provider_name": "Malaysia Digital Economy Corporation (MDEC)",
+    "source_url": "https://www.mdec.my/grants/mdag-ai",
+    "description": "MALAYSIA DIGITAL ACCELERATION GRANT \u2013 AI Fast-track your Artificial Intelligence growth with up to RM 2 million in performance-based funding.",
+    "amount_min": 50000.0,
+    "amount_max": 2000000.0,
+    "nationality": "Malaysia",
+    "industry": "Digital economy",
+    "eligibility_notes": null,
+    "application_deadline": "18th July 2025 Scope Of Evaluation Company Background Reference should be past track record (where applicable), together with the branding and any other relevant information",
+    "status": "closed",
+    "metadata_json": {
+      "source_name": "mdec-grants",
+      "extraction_mode": "fallback_regex",
+      "fallback_reason": "Z.AI authentication failed with 401. Check ZAI_API_KEY in .env."
+    },
+    "requirements": []
+  }
+]

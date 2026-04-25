@@ -7,7 +7,19 @@ from backend.src.database.models import SessionLocal, init_db
 from backend.src.routes import grants_router, health_router, profiles_router
 
 
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+OPENAPI_TAGS = [
+    {"name": "health", "description": "Service status and model metadata."},
+    {"name": "users", "description": "Account registration, onboarding, company profile, documents, and system state."},
+    {"name": "grants", "description": "Scout, evaluator matching, grant details, readiness checklist, drafter generation, and packages."},
+]
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description=settings.app_description,
+    openapi_tags=OPENAPI_TAGS,
+)
 
 app.add_middleware(
     CORSMiddleware,

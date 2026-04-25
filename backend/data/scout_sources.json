@@ -1,0 +1,25 @@
+[
+  {
+    "name": "mdec-grants",
+    "seed_urls": [
+      "https://www.mdec.my/grants"
+    ],
+    "allowed_domains": [
+      "mdec.my",
+      "www.mdec.my"
+    ],
+    "allow_url_patterns": [
+      "/grants"
+    ],
+    "selectors": [
+      "main",
+      "article",
+      ".content",
+      ".entry-content",
+      ".post-content",
+      "body"
+    ],
+    "max_pages": 6,
+    "enabled": true
+  }
+]
