@@ -8,5 +8,9 @@
     "lint": "npm --prefix frontend run lint",
     "install:frontend": "npm --prefix frontend install",
     "ci:frontend": "npm --prefix frontend ci"
+  },
+  "dependencies": {
+    "@google/genai": "^1.51.0",
+    "pptxgenjs": "^4.0.1"
   }
 }

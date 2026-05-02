@@ -614,7 +614,7 @@ _c4 = PipelineStagePanel;
                             }, void 0, false, {
                                 fileName: "[project]/cursor/SME(UMHACK)/Grantly/frontend/src/app/page.tsx",
                                 lineNumber: 151,
-                                columnNumber: 83
+                                columnNumber: 88
                             }, this),
                             " with thousands of active grants to find your perfect fit."
                         ]
@@ -1288,12 +1288,8 @@ function TestimonialCard({ quote, name, role, avatarColor }) {
                     color: "#334155",
                     fontStyle: "italic"
                 },
-                children: [
-                    '"',
-                    quote,
-                    '"'
-                ]
-            }, void 0, true, {
+                children: `"${quote}"`
+            }, void 0, false, {
                 fileName: "[project]/cursor/SME(UMHACK)/Grantly/frontend/src/app/page.tsx",
                 lineNumber: 261,
                 columnNumber: 7

@@ -410,8 +410,38 @@ input, textarea {
   }
 }
 
+.animate-spin {
+  animation: 1s linear infinite spin;
+}
+
+.animate-pulse-soft {
+  animation: 1.6s ease-in-out infinite pulseSoft;
+}
+
 .animate-fade-in {
   animation: .5s ease-out forwards fadeIn;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulseSoft {
+  0%, 100% {
+    opacity: .55;
+    transform: scale(.98);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .gradient-text {
