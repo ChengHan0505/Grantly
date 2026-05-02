@@ -314,10 +314,17 @@ async function ensureOk(response: Response, acceptedCodes: Set<number> = new Set
 
   let detail: unknown = `API error ${response.status}`;
   try {
-    const body = await response.json();
-    detail = body.detail ?? body;
+    const text = await response.text();
+    if (text) {
+      try {
+        const body = JSON.parse(text) as { detail?: unknown };
+        detail = body.detail ?? body;
+      } catch {
+        detail = text;
+      }
+    }
   } catch {
-    detail = await response.text();
+    /* keep default detail */
   }
   throw new ApiError(response.status, detail);
 }
