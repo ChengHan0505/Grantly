@@ -1,3 +1,8 @@
 {
-  "/dashboard/page": "app/dashboard/page.js"
+  "/business-fundamentals/page": "app/business-fundamentals/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/document-vault/page": "app/document-vault/page.js",
+  "/initialize/page": "app/initialize/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js"
 }

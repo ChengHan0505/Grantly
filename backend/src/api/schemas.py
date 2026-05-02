@@ -318,7 +318,6 @@ class DeckCritiqueRead(BaseModel):
 class PitchDeckEvaluationRead(BaseModel):
     critique: DeckCritiqueRead
     evaluated_document: DocumentRead
-    review_document: DocumentRead | None = None
     message: str
 
 
