@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import random
 import re
 import zipfile
 from collections.abc import Mapping
@@ -14,6 +15,12 @@ PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presen
 SLIDE_CX = 12192000
 SLIDE_CY = 6858000
 LAYOUTS = {"hero", "split", "metrics", "timeline", "cards", "closing"}
+PITCH_DECK_TEMPLATES = (
+    "classic_left_rail",
+    "executive_header",
+    "corner_focus",
+    "ledger_grid",
+)
 
 CREATIVE_DECK_SYSTEM_PROMPT = """You design evidence-rich grant pitch decks for Malaysian SMEs.
 Return compact JSON only:
@@ -218,7 +225,14 @@ async def build_creative_pitch_deck_pptx(
     api_key: str | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
     fallback_slides = build_pitch_deck_slides(sme_profile, grant_context)
-    plan = await generate_creative_deck_plan(sme_profile, grant_context, api_key=api_key)
+    try:
+        plan = await generate_creative_deck_plan(sme_profile, grant_context, api_key=api_key)
+    except Exception as exc:  # noqa: BLE001
+        return build_pitch_deck_pptx_from_slides(fallback_slides), {
+            "slides": fallback_slides,
+            "generation_mode": "deterministic_fallback",
+            "fallback_reason": str(exc)[:240],
+        }
     slides = _normalize_ai_slides(plan, fallback_slides)
     return build_pitch_deck_pptx_from_slides(slides), {"slides": slides}
 
@@ -242,12 +256,16 @@ async def generate_creative_deck_plan(
     )
 
 
-def build_pitch_deck_pptx_from_slides(slides: list[dict[str, Any]]) -> bytes:
+def build_pitch_deck_pptx_from_slides(
+    slides: list[dict[str, Any]],
+    template: str | None = None,
+) -> bytes:
+    selected_template = _resolve_template(template)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as deck:
         _write_static_parts(deck, len(slides))
         for index, slide in enumerate(slides, start=1):
-            deck.writestr(f"ppt/slides/slide{index}.xml", _slide_xml(index, slide))
+            deck.writestr(f"ppt/slides/slide{index}.xml", _slide_xml(index, slide, selected_template))
             deck.writestr(f"ppt/slides/_rels/slide{index}.xml.rels", _slide_rels_xml())
     return buffer.getvalue()
 
@@ -431,6 +449,12 @@ def _safe_color(value: Any, fallback: str | None = "0087A5") -> str | None:
     return fallback
 
 
+def _resolve_template(template: str | None) -> str:
+    if template in PITCH_DECK_TEMPLATES:
+        return str(template)
+    return random.choice(PITCH_DECK_TEMPLATES)
+
+
 def _write_static_parts(deck: zipfile.ZipFile, slide_count: int) -> None:
     deck.writestr("[Content_Types].xml", _content_types_xml(slide_count))
     deck.writestr("_rels/.rels", _root_rels_xml())
@@ -538,7 +562,7 @@ def _slide_rels_xml() -> str:
 </Relationships>"""
 
 
-def _slide_xml(index: int, slide: Mapping[str, Any]) -> str:
+def _slide_xml(index: int, slide: Mapping[str, Any], template: str) -> str:
     title = escape(str(slide.get("title", "")))
     subtitle = slide.get("subtitle")
     bullets = [escape(str(item)) for item in slide.get("bullets", [])[:5]]
@@ -550,21 +574,81 @@ def _slide_xml(index: int, slide: Mapping[str, Any]) -> str:
     layout = slide.get("layout") if slide.get("layout") in LAYOUTS else None
     accent = _safe_color(slide.get("accent_color"), None) or ["0087A5", "494BD6", "00A676", "E09F3E"][(index - 1) % 4]
     body = _slide_body(index, layout or "split", title, escape(str(subtitle or "")), bullets, metrics, accent)
-    footer = _footer(index)
+    footer = _footer(index, template)
+    background = _template_background(template)
+    chrome = _template_chrome(index, accent, template)
     return f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
   <p:cSld>
-    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="F8FBFC"/></a:solidFill></p:bgPr></p:bg>
+    <p:bg><p:bgPr><a:solidFill><a:srgbClr val="{background}"/></a:solidFill></p:bgPr></p:bg>
     <p:spTree>
       <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
       <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-      {_accent_bar(index, accent)}
+      {chrome}
       {body}
       {footer}
     </p:spTree>
   </p:cSld>
   <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
 </p:sld>"""
+
+
+def _template_background(template: str) -> str:
+    return {
+        "classic_left_rail": "F8FBFC",
+        "executive_header": "FFFFFF",
+        "corner_focus": "FBFCFD",
+        "ledger_grid": "FFFFFF",
+    }.get(template, "F8FBFC")
+
+
+def _template_chrome(index: int, accent: str, template: str) -> str:
+    if template == "executive_header":
+        return _executive_header_template(index, accent)
+    if template == "corner_focus":
+        return _corner_focus_template(index, accent)
+    if template == "ledger_grid":
+        return _ledger_grid_template(index, accent)
+    return _accent_bar(index, accent)
+
+
+def _executive_header_template(index: int, accent: str) -> str:
+    return (
+        _rect(910, 0, 0, SLIDE_CX, 520000, "EEF7F9", geometry="rect")
+        + _rect(911, 0, 0, SLIDE_CX, 105000, accent, geometry="rect")
+        + _rect(912, 10800000, 0, 1320000, 520000, "0A3945", geometry="rect")
+        + _rect(913, 0, 6320000, SLIDE_CX, 70000, "D8E5E9", geometry="rect")
+        + _textbox(914, 10930000, 170000, 1000000, 210000, f"{index:02d}", 1050, "FFFFFF", bold=True)
+    )
+
+
+def _corner_focus_template(index: int, accent: str) -> str:
+    return (
+        _rect(920, 0, 0, 2580000, SLIDE_CY, "F1F6F8", geometry="rect")
+        + _rect(921, 0, 0, 2580000, 160000, accent, geometry="rect")
+        + _rect(922, 10480000, 5280000, 1350000, 1010000, "E9F2F5", geometry="rect")
+        + _rect(923, 10820000, 5550000, 760000, 480000, accent, geometry="rect")
+        + _textbox(924, 320000, 6280000, 1500000, 220000, f"SLIDE {index:02d}", 950, "78909C", bold=True)
+    )
+
+
+def _ledger_grid_template(index: int, accent: str) -> str:
+    grid = (
+        _rect(930, 0, 1040000, SLIDE_CX, 26000, "EEF3F5", geometry="rect")
+        + _rect(931, 0, 2160000, SLIDE_CX, 26000, "EEF3F5", geometry="rect")
+        + _rect(932, 0, 3280000, SLIDE_CX, 26000, "EEF3F5", geometry="rect")
+        + _rect(933, 0, 4400000, SLIDE_CX, 26000, "EEF3F5", geometry="rect")
+        + _rect(934, 3050000, 0, 26000, SLIDE_CY, "F2F6F7", geometry="rect")
+        + _rect(935, 6100000, 0, 26000, SLIDE_CY, "F2F6F7", geometry="rect")
+        + _rect(936, 9150000, 0, 26000, SLIDE_CY, "F2F6F7", geometry="rect")
+    )
+    return (
+        grid
+        + _rect(937, 620000, 545000, 820000, 110000, accent, geometry="rect")
+        + _rect(938, 11100000, 0, 280000, SLIDE_CY, "F2F7F9", geometry="rect")
+        + _rect(939, 11380000, 0, 140000, SLIDE_CY, accent, geometry="rect")
+        + _textbox(940, 11170000, 6200000, 700000, 220000, f"{index:02d}", 950, "78909C", bold=True)
+    )
 
 
 def _slide_body(
@@ -703,7 +787,16 @@ def _paragraph(text: str, font_size: int, color: str, bullet: bool = False) -> s
     return f"""<a:p><a:pPr marL="{360000 if bullet else 0}" indent="{ -180000 if bullet else 0}">{bullet_xml}</a:pPr><a:r><a:rPr lang="en-US" sz="{font_size}"><a:solidFill><a:srgbClr val="{color}"/></a:solidFill></a:rPr><a:t>{text}</a:t></a:r><a:endParaRPr lang="en-US" sz="{font_size}"/></a:p>"""
 
 
-def _rect(shape_id: int, x: int, y: int, cx: int, cy: int, fill_color: str, line_color: str | None = None) -> str:
+def _rect(
+    shape_id: int,
+    x: int,
+    y: int,
+    cx: int,
+    cy: int,
+    fill_color: str,
+    line_color: str | None = None,
+    geometry: str = "roundRect",
+) -> str:
     line_xml = (
         f'<a:ln w="12700"><a:solidFill><a:srgbClr val="{line_color}"/></a:solidFill></a:ln>'
         if line_color
@@ -711,7 +804,7 @@ def _rect(shape_id: int, x: int, y: int, cx: int, cy: int, fill_color: str, line
     )
     return f"""<p:sp>
   <p:nvSpPr><p:cNvPr id="{shape_id}" name="Shape {shape_id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
-  <p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="{fill_color}"/></a:solidFill>{line_xml}</p:spPr>
+  <p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm><a:prstGeom prst="{geometry}"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="{fill_color}"/></a:solidFill>{line_xml}</p:spPr>
 </p:sp>"""
 
 
@@ -733,7 +826,13 @@ def _accent_bar(index: int, color: str | None = None) -> str:
 </p:sp>"""
 
 
-def _footer(index: int) -> str:
+def _footer(index: int, template: str = "classic_left_rail") -> str:
+    if template == "executive_header":
+        return _textbox(11, 9300000, 6360000, 2300000, 250000, f"Grantly Deck / {index}", 1050, "607D8B")
+    if template == "corner_focus":
+        return _textbox(11, 9400000, 6360000, 2100000, 250000, f"Grantly / {index}", 1050, "78909C")
+    if template == "ledger_grid":
+        return _textbox(11, 9200000, 6360000, 1700000, 250000, f"Grantly / {index}", 1050, "78909C")
     return _textbox(11, 9600000, 6350000, 2000000, 260000, f"Grantly / {index}", 1100, "78909C")
 
 

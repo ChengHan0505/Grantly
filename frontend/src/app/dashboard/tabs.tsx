@@ -92,6 +92,46 @@ function grantStatusTone(status?: string | null): { background: string; border: 
   return { background: "#FFF4E5", border: "#FFDDB6", color: "#904D00", icon: "help" };
 }
 
+function recordFromUnknown(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function stringListFromUnknown(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function critiqueFromUnknown(value: unknown): PitchDeckEvaluationRead["critique"] | null {
+  const record = recordFromUnknown(value);
+  if (!record) return null;
+  const overallScore = typeof record.overall_score === "number" ? record.overall_score : null;
+  const reviewSummary = typeof record.review_summary === "string" ? record.review_summary : null;
+  const strengths = stringListFromUnknown(record.strengths);
+  const weaknesses = stringListFromUnknown(record.weaknesses);
+  const actionItems = stringListFromUnknown(record.action_items_to_improve);
+  if (overallScore === null && !reviewSummary && strengths.length === 0 && weaknesses.length === 0 && actionItems.length === 0) {
+    return null;
+  }
+  return {
+    overall_score: overallScore,
+    review_summary: reviewSummary,
+    strengths,
+    weaknesses,
+    action_items_to_improve: actionItems,
+  };
+}
+
+function storedPitchDeckEvaluationFromDocument(document: DocumentRead): PitchDeckEvaluationRead | null {
+  const metadata = recordFromUnknown(document.metadata_json);
+  const storedEvaluation = recordFromUnknown(metadata?.pitch_deck_evaluation);
+  const critique = critiqueFromUnknown(storedEvaluation?.critique);
+  if (!critique) return null;
+  return {
+    critique,
+    evaluated_document: document,
+    message: "Pitch Deck Evaluator reviewed this deck and returned inline analytics.",
+  };
+}
+
 export function HomeTab({
   currentUser,
   rankedGrants,
@@ -1077,7 +1117,7 @@ function ApplicationRoadmap({
           </div>
         </div>
         <span className={s.tag} style={{ background: "#EAF8FC", color: "#006780" }}>
-          {roadmap.generated_by === "zai_coach_agent" ? "ZAI Coach" : "Coach fallback"}
+          {roadmap.generated_by === "gemini_coach_agent" ? "Gemini Coach" : "Coach fallback"}
         </span>
       </div>
       <div style={{ height: 12 }} />
@@ -1156,7 +1196,10 @@ function PitchDeckEvaluationPanel({
     .slice()
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const uploadedDeck = uploadedDecks[0] || null;
-  const critique = evaluation?.critique || null;
+  const activeEvaluation = evaluation || (uploadedDeck ? storedPitchDeckEvaluationFromDocument(uploadedDeck) : null);
+  const critique = activeEvaluation?.critique || null;
+  const evaluatedDeck = activeEvaluation?.evaluated_document || uploadedDeck;
+  const reviewScore = typeof critique?.overall_score === "number" ? Math.max(0, Math.min(100, critique.overall_score)) : null;
 
   return (
     <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
@@ -1210,8 +1253,8 @@ function PitchDeckEvaluationPanel({
         </div>
         <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
           <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>INLINE REVIEW ANALYTICS</div>
-          <div style={{ color: critique?.overall_score !== undefined && critique?.overall_score !== null ? "#494BD6" : "#3D494D", fontSize: 24, fontWeight: 900, marginTop: 4 }}>
-            {critique?.overall_score !== undefined && critique?.overall_score !== null ? `${critique.overall_score}%` : "Pending"}
+          <div style={{ color: reviewScore !== null ? "#494BD6" : "#3D494D", fontSize: 24, fontWeight: 900, marginTop: 4 }}>
+            {reviewScore !== null ? `${reviewScore}%` : "Pending"}
           </div>
           <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45 }}>
             {critique?.review_summary || "Upload a pitch deck to see review analytics directly in the interface."}
@@ -1220,14 +1263,14 @@ function PitchDeckEvaluationPanel({
       </div>
 
       {critique && (
-        <div style={{ marginTop: 16, padding: 16, border: "1px solid #E0E7EC", borderRadius: 20, background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)" }}>
+        <div aria-live="polite" style={{ marginTop: 16, padding: 16, border: "1px solid #E0E7EC", borderRadius: 20, background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.4, color: "#6B7280" }}>REVIEW ANALYTICS</div>
               <div style={{ fontSize: 18, fontWeight: 900, color: "#191C1E", marginTop: 4 }}>Deck evaluation results</div>
             </div>
             <span className={s.tag} style={{ background: "#FFF4E5", color: "#904D00" }}>
-              {critique.review_summary || "Needs polish"}
+              INLINE RESULT
             </span>
           </div>
 
@@ -1236,18 +1279,18 @@ function PitchDeckEvaluationPanel({
             <div style={{ border: "1px solid #E0E7EC", borderRadius: 16, padding: 14, background: "#fff" }}>
               <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>UPLOADED DECK</div>
               <div style={{ color: "#191C1E", fontSize: 13, fontWeight: 800, marginTop: 8, overflowWrap: "anywhere" }}>
-                {uploadedDeck?.file_name || "No uploaded pitch deck yet"}
+                {evaluatedDeck?.file_name || "No uploaded pitch deck yet"}
               </div>
               <div style={{ color: "#3D494D", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
-                {uploadedDeck ? "This deck is being reviewed against the selected grant." : "Upload a deck to trigger evaluation."}
+                {evaluatedDeck ? "This inline review is attached to the selected grant and uploaded deck." : "Upload a deck to trigger evaluation."}
               </div>
             </div>
 
             <div style={{ border: "1px solid #E0E7EC", borderRadius: 16, padding: 14, background: "#fff" }}>
               <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>REVIEW ANALYTICS</div>
-              <div style={{ color: "#904D00", fontSize: 34, fontWeight: 900, marginTop: 8 }}>{critique.overall_score ?? 0}%</div>
+              <div style={{ color: "#904D00", fontSize: 34, fontWeight: 900, marginTop: 8 }}>{reviewScore ?? 0}%</div>
               <div style={{ height: 10, borderRadius: 999, background: "#E5E7EB", overflow: "hidden", marginTop: 12 }}>
-                <div style={{ width: `${critique.overall_score ?? 0}%`, height: "100%", background: "linear-gradient(90deg, #904D00, #006780)" }} />
+                <div style={{ width: `${reviewScore ?? 0}%`, height: "100%", background: "linear-gradient(90deg, #904D00, #006780)" }} />
               </div>
               <div style={{ marginTop: 10, fontSize: 12, color: "#3D494D", lineHeight: 1.55 }}>
                 {critique.review_summary || "The evaluator has analysed the deck and generated inline analytics."}
@@ -1294,9 +1337,10 @@ function GeneratedOutputs({
   currentUser: UserRead | null;
   grantId: number | null;
 }) {
+  const inlineReviewTypes = new Set(["pitch_deck_critique", "pitch_deck_review", "pitch_deck_evaluation"]);
   const generated = (snapshot?.generated_documents || []).filter((document) => {
     const lowerName = document.file_name.toLowerCase();
-    return document.document_type !== "pitch_deck_review" && !lowerName.endsWith(".md");
+    return !inlineReviewTypes.has(document.document_type.toLowerCase()) && !lowerName.endsWith(".md");
   });
   if (!snapshot || !currentUser || !grantId || generated.length === 0) return null;
 

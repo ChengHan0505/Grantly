@@ -62,6 +62,19 @@ def _document_payload_from_model(document: CompanyDocument) -> dict:
     }
 
 
+INLINE_REVIEW_DOCUMENT_TYPES = {"pitch_deck_critique", "pitch_deck_review", "pitch_deck_evaluation"}
+
+
+def is_inline_review_document(document: CompanyDocument) -> bool:
+    document_type = (document.document_type or "").lower()
+    file_name = (document.file_name or "").lower()
+    return (
+        document_type in INLINE_REVIEW_DOCUMENT_TYPES
+        or "pitch_deck_critique" in file_name
+        or "pitch_deck_review" in file_name
+    )
+
+
 def _profile_payload_from_model(profile: SMEProfile) -> dict:
     return {
         "company_name": profile.company_name,
@@ -464,7 +477,9 @@ def build_grant_application_snapshot(db: Session, user_id: int, grant_id: int) -
     generated_documents = [
         doc
         for doc in documents
-        if doc.status == "generated" and doc.metadata_json.get("grant_id") == grant_id
+        if doc.status == "generated"
+        and doc.metadata_json.get("grant_id") == grant_id
+        and not is_inline_review_document(doc)
     ]
     return {
         "grant": grant,

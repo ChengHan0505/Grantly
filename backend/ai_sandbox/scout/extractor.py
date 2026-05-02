@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from dateutil import parser as date_parser
-from zhipuai import ZhipuAI
 
+from backend.ai_sandbox.glm_client import GLMClient
 from .schemas import ScoutGrantRecord, ScoutRequirement
 
 
@@ -38,11 +37,6 @@ CLOSED_PATTERNS = [
     r"\bdeadline\s+has\s+passed\b",
     r"\bexpired\b",
 ]
-
-
-def _safe_json_slice(text: str) -> str:
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    return match.group(0) if match else "{}"
 
 
 def _first_match(patterns: list[str], text: str) -> str | None:
@@ -302,8 +296,7 @@ def fallback_extract_grants_from_page(
 
 
 def extract_grants_from_page(
-    client: ZhipuAI,
-    model: str,
+    client: GLMClient,
     page_url: str,
     page_text: str,
     source_name: str,
@@ -328,17 +321,11 @@ def extract_grants_from_page(
         f"Page Text:\n{page_text}"
     )
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": "You are a strict JSON extraction engine."},
-            {"role": "user", "content": prompt},
-        ],
+    payload = client.generate_json_sync(
+        system_prompt="You are a strict JSON extraction engine.",
+        user_prompt=prompt,
         temperature=0.1,
     )
-    raw_text = response.choices[0].message.content if response.choices else "{}"
-    json_text = _safe_json_slice(raw_text)
-    payload = json.loads(json_text)
     records: list[ScoutGrantRecord] = []
     for item in payload.get("grants", []):
         if not item.get("source_url"):

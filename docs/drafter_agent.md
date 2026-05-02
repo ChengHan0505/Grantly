@@ -1,13 +1,13 @@
-# Z.AI generating React slide components
+# Gemini generating React slide components
 
-Because GLM models are strong at frontend/code generation, you can ask Z.AI to output React/Tailwind slide components instead of raw PPTX. Z.AI’s GLM-4.7 docs specifically mention stronger frontend aesthetics and improved generation of webpages, PPTs, and posters.
+Because Gemini models are strong at frontend/code generation, you can ask Gemini to output React/Tailwind slide components instead of raw PPTX.
 
 Workflow:
 
 ```md
 Content JSON
    ↓
-Z.AI generates React component for each slide
+Gemini generates React component for each slide
    ↓
 Render inside your web app
    ↓
@@ -45,9 +45,9 @@ My recommended approach for your hackathon
 Use this architecture:
 
 ```md
-Z.AI content agent
+Gemini content agent
    ↓
-Z.AI layout agent
+Gemini layout agent
    ↓
 React slide renderer
    ↓
@@ -95,7 +95,7 @@ Endpoint:
 POST /grants/drafter/pitch-deck
 ```
 
-For Z.AI-assisted creative layouts:
+For Gemini-assisted creative layouts:
 
 ```http
 POST /grants/drafter/pitch-deck/creative
@@ -104,7 +104,7 @@ POST /grants/drafter/pitch-deck/creative
 Set the API token in your console or `.env`; never paste it into the request body:
 
 ```powershell
-$env:ZAI_API_KEY="your-token-here"
+$env:GOOGLE_API_KEY="your-token-here"
 ```
 
 Request:
@@ -151,4 +151,4 @@ Request:
 }
 ```
 
-This calls Z.AI with `settings.zai_api_key`, renders the returned slide plan into a `.pptx`, stores the file as a generated `CompanyDocument` tied to `user_id`, and returns a `download_url`.
+This calls Gemini with `settings.google_api_key`, renders the returned slide plan into a `.pptx`, stores the file as a generated `CompanyDocument` tied to `user_id`, and returns a `download_url`.

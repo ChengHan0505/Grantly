@@ -6,8 +6,8 @@ from pathlib import Path
 
 import requests
 from sqlalchemy.orm import Session
-from zhipuai import ZhipuAI
 
+from backend.ai_sandbox.glm_client import GLMClient
 from backend.src.core.config import settings
 from backend.src.database.db import upsert_grant_from_scout
 
@@ -35,8 +35,17 @@ def _upsert_normalized_grant(db: Session, normalized) -> bool:
 
 def _summarize_extraction_error(exc: Exception) -> str:
     text = str(exc).replace("\n", " ").strip()
+    lower_text = text.lower()
+    if "401" in text and "claude" in lower_text:
+        return "Claude Sonnet authentication failed with 401. Check CLAUDE_SONNET_API_KEY in .env."
+    if "401" in text and "z.ai" in text.lower():
+        return "Gemini failed and Z.ai authentication failed with 401. Check ZAI_API_KEY in .env."
+    if "401" in text and "openrouter" in lower_text:
+        return "Claude failed and OpenRouter Gemini authentication failed with 401. Check OPENROUTER_GEMINI_API_KEY or OPENROUTER_API_KEY in .env."
     if "401" in text:
-        return "Z.AI authentication failed with 401. Check ZAI_API_KEY in .env."
+        return "Gemini authentication failed with 401. Check GOOGLE_API_KEY in .env."
+    if "429" in text or "rate limit" in lower_text or "quota" in lower_text:
+        return "Claude/OpenRouter/Gemini/Z.ai rate limit reached. Local fallback extraction will be used for this Scout run."
     return text[:300]
 
 
@@ -83,7 +92,20 @@ def run_scout(
     if not report_path.is_absolute():
         report_path = project_dir / report_path if report_path.parts and report_path.parts[0] == "backend" else backend_dir / report_path
 
-    client = ZhipuAI(api_key=settings.zai_api_key, base_url=settings.zai_base_url, timeout=20.0, max_retries=0) if settings.zai_api_key else None
+    client = (
+        GLMClient(
+            api_key=settings.google_api_key,
+            model=settings.gemini_model,
+            claude_api_key=settings.claude_sonnet_api_key,
+            claude_model=settings.claude_sonnet_model,
+            openrouter_api_key=settings.openrouter_api_key,
+            openrouter_model=settings.openrouter_model,
+            zai_api_key=settings.zai_api_key,
+            zai_model=settings.zai_model,
+        )
+        if settings.claude_sonnet_api_key or settings.google_api_key or settings.openrouter_api_key or settings.zai_api_key
+        else None
+    )
     http = requests.Session()
     http.headers.update({"User-Agent": settings.scout_user_agent})
 
@@ -96,7 +118,10 @@ def run_scout(
     grants_found_unknown = 0
     errors: list[str] = []
     all_records = []
-    llm_disabled_reason = "Missing ZAI_API_KEY; using local fallback extractor." if client is None else None
+    llm_disabled_reason = (
+        "Missing CLAUDE_SONNET_API_KEY, OPENROUTER_GEMINI_API_KEY/OPENROUTER_API_KEY, GOOGLE_API_KEY, and ZAI_API_KEY; "
+        "using local fallback extractor."
+    ) if client is None else None
     auth_notice_added = False
     fallback_notice_added = False
 
@@ -145,14 +170,13 @@ def run_scout(
                     try:
                         extracted = extract_grants_from_page(
                             client=client,
-                            model=settings.zai_model,
                             page_url=page["url"],
                             page_text=page_text,
                             source_name=source.name,
                         )
                     except Exception as exc:  # noqa: BLE001
                         fallback_reason = _summarize_extraction_error(exc)
-                        if "401" in fallback_reason:
+                        if "401" in fallback_reason or "rate limit" in fallback_reason.lower():
                             llm_disabled_reason = fallback_reason
                             client = None
                             if not auth_notice_added:
