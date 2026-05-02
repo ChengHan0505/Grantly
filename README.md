@@ -21,6 +21,18 @@
 
 ---
 
+##  ✅ Submission Link
+
+1. Refined QATD: <https://drive.google.com/file/d/1ixN4gdK9kUuULFavjp8myOdU3z8Gx1Ws/view?usp=sharing>
+
+2. Deployment Plan: <https://drive.google.com/file/d/1TQKVW4sd0XbLbwYlb4OwELTEPzorT0De/view?usp=sharing>
+
+3. Business Proposal: <https://drive.google.com/file/d/1rfDstG5xx9VYY1uHQhXTKtPA7XS8KHNw/view?usp=sharing>
+
+4. Pitch Deck: <https://drive.google.com/file/d/1NFgphPY-yU77c0Le5iNELzJieu9LrpII/view?usp=sharing>
+
+---
+
 ## Repository Overview & Team Introduction
 
 **Grantly** is a monorepo containing a **Next.js web application** and a **FastAPI multi-agent backend**. It helps Malaysian SMEs move from "I do not know which grant I qualify for" to a clear application package with matched grants, readiness scoring, missing-document coaching, generated proposals, and downloadable pitch decks.
