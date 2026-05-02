@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { pitchDeckController } from "../../../../../backend/src/pitch_deck/PitchDeckController";
+import { pitchDeckController } from "@/lib/pitch_deck/PitchDeckController";
 
 export const runtime = "nodejs";
 
