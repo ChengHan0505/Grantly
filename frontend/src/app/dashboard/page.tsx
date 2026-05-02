@@ -13,14 +13,14 @@ import { clearCurrentUser, rehydrateCurrentUser } from "@/services/grantlySessio
 import s from "./page.module.css";
 import { HomeTab, GrantTab } from "./tabs";
 import { CompanyTab, DraftsTab } from "./tabs2";
-import { TeamTab } from "./tabs3";
+import { ReimbursementTab, TeamTab } from "./tabs3";
 
 function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
   return <span className="material-icon" style={{ fontSize: size, color }}>{name}</span>;
 }
 
-const TAB_ICONS = ["grid_view", "folder", "domain", "history_edu", "group"];
-const TAB_LABELS = ["Home", "Grants", "Company", "Roadmaps", "Team"];
+const TAB_ICONS = ["grid_view", "folder", "domain", "history_edu", "group", "request_quote"];
+const TAB_LABELS = ["Home", "Grants", "Company", "Roadmaps", "Team", "Reimbursement"];
 
 export default function DashboardPage() {
   const [tab, setTab] = React.useState(0);
@@ -111,6 +111,7 @@ export default function DashboardPage() {
     <CompanyTab key="company" currentUser={currentUser} profile={profile} documents={documents} onRefresh={reloadWorkspace} />,
     <DraftsTab key="drafts" documents={documents} rankedGrants={rankedMatches} />,
     <TeamTab key="team" />,
+    <ReimbursementTab key="reimbursement" currentUser={currentUser} profile={profile} documents={documents} />,
   ];
 
   return <div className={s.root}>

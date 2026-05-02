@@ -12,10 +12,10 @@ import asyncio
 import json
 
 try:
-    from .glm_client import GLMClient
+    from backend.ai_sandbox.glm_client import GLMClient
     from .schemas import CoachOutput, EvaluatorOutput, EvidenceTrace
 except ImportError:  # pragma: no cover - supports direct script execution
-    from glm_client import GLMClient
+    from backend.ai_sandbox.glm_client import GLMClient
     from schemas import CoachOutput, EvaluatorOutput, EvidenceTrace
 
 

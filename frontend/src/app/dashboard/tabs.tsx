@@ -120,6 +120,7 @@ export function HomeTab({
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
         <div style={{ flex: "1 1 600px", display: "flex", flexDirection: "column", gap: 16 }}>
+          <PremiumFeatureCard />
           <MetricCards rankedGrants={rankedGrants} profile={profile} documents={documents} />
 
           <div className={s.panel} style={{ padding: 24, borderRadius: 26, background: "rgba(242,244,246,0.78)" }}>
@@ -153,6 +154,42 @@ export function HomeTab({
       {selectedGrant && (
         <GrantModal grant={selectedGrant} onClose={() => setSelectedGrant(null)} onApply={onApply} />
       )}
+    </div>
+  );
+}
+
+function PremiumFeatureCard() {
+  return (
+    <div
+      className={s.panel}
+      style={{
+        padding: 24,
+        borderRadius: 28,
+        background: "linear-gradient(135deg, rgba(0,103,128,0.08), rgba(73,75,214,0.08))",
+        border: "1px solid rgba(0,180,216,0.18)",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", minWidth: 0 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 18, background: "rgba(0,180,216,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <MI name="description" size={26} color="#006780" />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span className={s.tag} style={{ background: "#FFF4E5", color: "#904D00" }}>Premium</span>
+              <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: "#006780" }}>AI REIMBURSEMENT DRAFTER</span>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.5, color: "#191C1E", marginTop: 8 }}>Generate formal technical progress reports for grant reimbursement claims using your project updates, expenses, and evidence.</div>
+            <div style={{ fontSize: 13, color: "#3D494D", lineHeight: 1.55, marginTop: 8, maxWidth: 760 }}>
+              Turn rough monthly notes into a government-style reimbursement draft with claim details, evidence tracking, and a polished report editor.
+            </div>
+          </div>
+        </div>
+        <Link href="/reimbursement-drafter" className="btn-primary" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+          <MI name="auto_awesome" size={15} color="#fff" />
+          Start Claim Draft
+        </Link>
+      </div>
     </div>
   );
 }
