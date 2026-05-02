@@ -1,6 +1,6 @@
 {
   "status": "ok",
-  "run_at": "2026-05-02T02:30:15.210739+00:00",
+  "run_at": "2026-05-02T09:50:33.894197+00:00",
   "source_count": 4,
   "pages_fetched": 0,
   "pages_failed": 0,
@@ -10,7 +10,7 @@
   "grants_found_open": 18,
   "grants_found_closed": 0,
   "grants_found_unknown": 0,
-  "raw_results_path": "C:\\Users\\User\\Desktop\\UM Y2S2\\UMHackathon\\Grantly_4\\Grantly\\backend\\data\\scout_runs\\run_20260502T023015Z.json",
+  "raw_results_path": "D:\\self-project\\GrantHunter\\backend\\data\\scout_runs\\run_20260502T095033Z.json",
   "errors": [],
   "mode": "curated_json"
 }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import Link from "next/link";
 import {
@@ -526,6 +526,8 @@ export function GrantTab({
   const [uploadingPitchDeck, setUploadingPitchDeck] = React.useState(false);
   const [evaluatingPitchDeck, setEvaluatingPitchDeck] = React.useState(false);
   const [pitchDeckEvaluation, setPitchDeckEvaluation] = React.useState<PitchDeckEvaluationRead | null>(null);
+  const [checklistCollapsed, setChecklistCollapsed] = React.useState(false);
+  const [roadmapCollapsed, setRoadmapCollapsed] = React.useState(false);
   const pitchDeckUploadRef = React.useRef<HTMLInputElement | null>(null);
 
   const effectiveGrantId = selectedGrantId ?? focusGrantId ?? rankedGrants[0]?.grant.id ?? grantLibrary[0]?.id ?? null;
@@ -797,7 +799,7 @@ export function GrantTab({
                 </div>
                 <div>
                   <div className={s.gapPanel}><MI name="assignment" size={14} color="#BA1A1A" /><div><div style={{ color: "#BA1A1A", fontWeight: 900, letterSpacing: 1, fontSize: 12 }}>APPLICATION CHECKLIST</div><div style={{ height: 8 }} /><div style={{ color: "#93000A", lineHeight: 1.4, fontSize: 13 }}>{snapshot ? `${snapshot.missing_required_documents.length} missing required item(s). Track: ${snapshot.track}.` : loadingSnapshot ? "Loading checklist..." : "Select a grant to load its checklist."}</div></div></div>
-                  <div style={{ height: 18 }} />
+                  <div style={{ height: 28 }} />
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
             <button className="btn-primary" onClick={handleRunDrafterBundle} disabled={!snapshot || loadingSnapshot} style={{ opacity: !snapshot || loadingSnapshot ? 0.65 : 1 }}>
               <MI name="auto_awesome" size={16} color="#fff" />Run Drafter Agent
@@ -815,15 +817,22 @@ export function GrantTab({
             <EmptyState title="No grants available" body="Start the backend to seed grant data, then refresh this dashboard." actionHref="/dashboard" actionLabel="Refresh" />
           )}
 
-          <div style={{ height: 16 }} />
-          <ApplicationRoadmap roadmap={roadmap} loading={loadingRoadmap} />
-          <div style={{ height: 16 }} />
+          <div style={{ height: 12 }} />
           <ApplicationChecklist
             snapshot={snapshot}
             loading={loadingSnapshot}
             uploadingRequirementId={uploadingRequirementId}
+            collapsed={checklistCollapsed}
+            onToggleCollapse={() => setChecklistCollapsed((value) => !value)}
             onGenerate={handleGenerate}
             onUpload={handleUploadDocument}
+          />
+          <div style={{ height: 24 }} />
+          <ApplicationRoadmap
+            roadmap={roadmap}
+            loading={loadingRoadmap}
+            collapsed={roadmapCollapsed}
+            onToggleCollapse={() => setRoadmapCollapsed((value) => !value)}
           />
           <div style={{ height: 16 }} />
           <PitchDeckEvaluationPanel
@@ -889,12 +898,26 @@ function GrantLibrary({
   onRunScout: () => void;
   onOpen: (grantId: number) => void;
 }) {
+  const pageSize = 10;
+  const [page, setPage] = React.useState(0);
   const openCount = grants.filter((grant) => grant.status.toLowerCase() === "open").length;
   const closedCount = grants.filter((grant) => grant.status.toLowerCase() === "closed").length;
   const otherCount = Math.max(0, grants.length - openCount - closedCount);
   const rankedLookup = new Map<number, { match: RankedGrantRead; rank: number }>(
     rankedGrants.map((match, index): [number, { match: RankedGrantRead; rank: number }] => [match.grant.id, { match, rank: index + 1 }]),
   );
+  const sortedGrants = grants
+    .slice()
+    .sort((a, b) => {
+      const aRank = rankedLookup.get(a.id)?.rank ?? Number.POSITIVE_INFINITY;
+      const bRank = rankedLookup.get(b.id)?.rank ?? Number.POSITIVE_INFINITY;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.title.localeCompare(b.title);
+    });
+  const pageCount = Math.max(1, Math.ceil(sortedGrants.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * pageSize;
+  const visibleGrants = sortedGrants.slice(pageStart, pageStart + pageSize);
 
   return (
     <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
@@ -929,7 +952,7 @@ function GrantLibrary({
         <div style={{ color: "#3D494D", fontSize: 13 }}>No grants are stored yet. Run the Scout Agent or seed the backend database to fill the library.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {grants.map((grant) => {
+          {visibleGrants.map((grant) => {
             const tone = grantStatusTone(grant.status);
             const ranked = rankedLookup.get(grant.id);
             const selected = selectedGrantId === grant.id;
@@ -963,6 +986,24 @@ function GrantLibrary({
               </div>
             );
           })}
+          {pageCount > 1 && (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
+              <div style={{ color: "#5F6E84", fontSize: 12 }}>
+                Showing {pageStart + 1}-{Math.min(pageStart + pageSize, sortedGrants.length)} of {sortedGrants.length}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button className="btn-soft" disabled={safePage === 0} onClick={() => setPage((value) => Math.max(0, value - 1))} style={{ fontSize: 12, opacity: safePage === 0 ? 0.5 : 1 }}>
+                  <MI name="chevron_left" size={14} />Prev
+                </button>
+                <span style={{ color: "#191C1E", fontSize: 12, fontWeight: 800 }}>
+                  Page {safePage + 1} / {pageCount}
+                </span>
+                <button className="btn-soft" disabled={safePage >= pageCount - 1} onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))} style={{ fontSize: 12, opacity: safePage >= pageCount - 1 ? 0.5 : 1 }}>
+                  Next<MI name="chevron_right" size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -978,15 +1019,30 @@ function roadmapTone(status: string): { color: string; background: string; icon:
   return { color: "#5F6E84", background: "#F2F4F6", icon: "schedule", label: "Pending" };
 }
 
-function ApplicationRoadmap({ roadmap, loading }: { roadmap: ApplicationRoadmapRead | null; loading: boolean }) {
+function ApplicationRoadmap({
+  roadmap,
+  loading,
+  collapsed,
+  onToggleCollapse,
+}: {
+  roadmap: ApplicationRoadmapRead | null;
+  loading: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
+}) {
   if (loading) {
     return (
       <div className={s.panel} style={{ borderRadius: 26, padding: 18, color: "#3D494D", fontSize: 13 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <MI name="route" size={17} color="#006780" />
-          <strong style={{ color: "#191C1E" }}>Coach Agent Application Roadmap</strong>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MI name="route" size={17} color="#006780" />
+            <strong style={{ color: "#191C1E" }}>Coach Agent Application Roadmap</strong>
+          </div>
+          <button type="button" className="btn-soft" onClick={onToggleCollapse} style={{ fontSize: 11, padding: "4px 8px" }}>
+            <MI name="unfold_less" size={14} />Collapse
+          </button>
         </div>
-        <div style={{ marginTop: 10 }}>Generating a grant application pipeline...</div>
+        {!collapsed && <div style={{ marginTop: 10 }}>Generating a grant application pipeline...</div>}
       </div>
     );
   }
@@ -994,7 +1050,16 @@ function ApplicationRoadmap({ roadmap, loading }: { roadmap: ApplicationRoadmapR
   if (!roadmap) {
     return (
       <div className={s.panel} style={{ borderRadius: 26, padding: 18, color: "#3D494D", fontSize: 13 }}>
-        Coach Agent roadmap will appear after the grant application checklist loads.
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MI name="route" size={17} color="#006780" />
+            <strong style={{ color: "#191C1E" }}>Coach Agent Application Roadmap</strong>
+          </div>
+          <button type="button" className="btn-soft" onClick={onToggleCollapse} style={{ fontSize: 11, padding: "4px 8px" }}>
+            <MI name="unfold_less" size={14} />Collapse
+          </button>
+        </div>
+        {!collapsed && <div style={{ marginTop: 10 }}>Coach Agent roadmap will appear after the grant application checklist loads.</div>}
       </div>
     );
   }
@@ -1015,41 +1080,50 @@ function ApplicationRoadmap({ roadmap, loading }: { roadmap: ApplicationRoadmapR
           {roadmap.generated_by === "zai_coach_agent" ? "ZAI Coach" : "Coach fallback"}
         </span>
       </div>
-      <div style={{ height: 16 }} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {roadmap.steps.map((step, index) => {
-          const tone = roadmapTone(step.status);
-          const isLast = index === roadmap.steps.length - 1;
-          return (
-            <div key={`${step.step_number}-${step.title}`} style={{ display: "grid", gridTemplateColumns: "34px minmax(0, 1fr)", gap: 12 }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                <div style={{ width: 30, height: 30, borderRadius: "50%", background: tone.background, color: tone.color, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tone.color}30` }}>
-                  <MI name={tone.icon} size={16} color={tone.color} />
-                </div>
-                {!isLast && <div style={{ width: 2, flex: 1, minHeight: 42, background: "#E0E7EC", marginTop: 6 }} />}
-              </div>
-              <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 900, color: "#191C1E", lineHeight: 1.3 }}>
-                      {step.step_number}. {step.title}
+      <div style={{ height: 12 }} />
+      <button type="button" className="btn-soft" onClick={onToggleCollapse} style={{ fontSize: 12, padding: "6px 10px" }}>
+        <MI name={collapsed ? "unfold_more" : "unfold_less"} size={14} />
+        {collapsed ? "Expand roadmap" : "Collapse roadmap"}
+      </button>
+      {!collapsed && (
+        <>
+          <div style={{ height: 16 }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {roadmap.steps.map((step, index) => {
+              const tone = roadmapTone(step.status);
+              const isLast = index === roadmap.steps.length - 1;
+              return (
+                <div key={`${step.step_number}-${step.title}`} style={{ display: "grid", gridTemplateColumns: "34px minmax(0, 1fr)", gap: 12 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: tone.background, color: tone.color, display: "flex", alignItems: "center", justifyContent: "center", border: `1px solid ${tone.color}30` }}>
+                      <MI name={tone.icon} size={16} color={tone.color} />
                     </div>
-                    <div style={{ color: "#5F6E84", fontSize: 11, marginTop: 3 }}>Owner: {step.owner}</div>
+                    {!isLast && <div style={{ width: 2, flex: 1, minHeight: 42, background: "#E0E7EC", marginTop: 6 }} />}
                   </div>
-                  <span className={s.tag} style={{ background: tone.background, color: tone.color }}>{tone.label}</span>
+                  <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 900, color: "#191C1E", lineHeight: 1.3 }}>
+                          {step.step_number}. {step.title}
+                        </div>
+                        <div style={{ color: "#5F6E84", fontSize: 11, marginTop: 3 }}>Owner: {step.owner}</div>
+                      </div>
+                      <span className={s.tag} style={{ background: tone.background, color: tone.color }}>{tone.label}</span>
+                    </div>
+                    <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45, marginTop: 8 }}>{step.description}</div>
+                    <div style={{ color: "#191C1E", fontSize: 12, lineHeight: 1.45, marginTop: 8, fontWeight: 700 }}>{step.action}</div>
+                    {step.download_url && (
+                      <a href={backendDownloadUrl(step.download_url)} className="btn-soft" style={{ textDecoration: "none", fontSize: 12, marginTop: 10, display: "inline-flex" }}>
+                        <MI name="download" size={14} />Download
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45, marginTop: 8 }}>{step.description}</div>
-                <div style={{ color: "#191C1E", fontSize: 12, lineHeight: 1.45, marginTop: 8, fontWeight: 700 }}>{step.action}</div>
-                {step.download_url && (
-                  <a href={backendDownloadUrl(step.download_url)} className="btn-soft" style={{ textDecoration: "none", fontSize: 12, marginTop: 10, display: "inline-flex" }}>
-                    <MI name="download" size={14} />Download
-                  </a>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1082,7 +1156,6 @@ function PitchDeckEvaluationPanel({
     .slice()
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const uploadedDeck = uploadedDecks[0] || null;
-  const storedReview = (snapshot?.generated_documents || []).find((document) => document.document_type === "pitch_deck_review") || null;
   const critique = evaluation?.critique || null;
 
   return (
@@ -1136,21 +1209,58 @@ function PitchDeckEvaluationPanel({
           </div>
         </div>
         <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
-          <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>LATEST REVIEW</div>
+          <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>INLINE REVIEW ANALYTICS</div>
           <div style={{ color: critique?.overall_score !== undefined && critique?.overall_score !== null ? "#494BD6" : "#3D494D", fontSize: 24, fontWeight: 900, marginTop: 4 }}>
-            {critique?.overall_score !== undefined && critique?.overall_score !== null ? `${critique.overall_score}%` : storedReview ? "Saved" : "Pending"}
+            {critique?.overall_score !== undefined && critique?.overall_score !== null ? `${critique.overall_score}%` : "Pending"}
           </div>
           <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45 }}>
-            {critique?.review_summary || (storedReview ? "A saved review is available in generated outputs." : "Run the evaluator after uploading a deck.")}
+            {critique?.review_summary || "Upload a pitch deck to see review analytics directly in the interface."}
           </div>
         </div>
       </div>
 
       {critique && (
-        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-          <CritiqueList title="Strengths" icon="thumb_up" color="#006780" items={critique.strengths} />
-          <CritiqueList title="Improve" icon="construction" color="#904D00" items={critique.weaknesses} />
-          <CritiqueList title="Next Actions" icon="playlist_add_check" color="#494BD6" items={critique.action_items_to_improve} />
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #E0E7EC", borderRadius: 20, background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1.4, color: "#6B7280" }}>REVIEW ANALYTICS</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "#191C1E", marginTop: 4 }}>Deck evaluation results</div>
+            </div>
+            <span className={s.tag} style={{ background: "#FFF4E5", color: "#904D00" }}>
+              {critique.review_summary || "Needs polish"}
+            </span>
+          </div>
+
+          <div style={{ height: 14 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+            <div style={{ border: "1px solid #E0E7EC", borderRadius: 16, padding: 14, background: "#fff" }}>
+              <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>UPLOADED DECK</div>
+              <div style={{ color: "#191C1E", fontSize: 13, fontWeight: 800, marginTop: 8, overflowWrap: "anywhere" }}>
+                {uploadedDeck?.file_name || "No uploaded pitch deck yet"}
+              </div>
+              <div style={{ color: "#3D494D", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+                {uploadedDeck ? "This deck is being reviewed against the selected grant." : "Upload a deck to trigger evaluation."}
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid #E0E7EC", borderRadius: 16, padding: 14, background: "#fff" }}>
+              <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>REVIEW ANALYTICS</div>
+              <div style={{ color: "#904D00", fontSize: 34, fontWeight: 900, marginTop: 8 }}>{critique.overall_score ?? 0}%</div>
+              <div style={{ height: 10, borderRadius: 999, background: "#E5E7EB", overflow: "hidden", marginTop: 12 }}>
+                <div style={{ width: `${critique.overall_score ?? 0}%`, height: "100%", background: "linear-gradient(90deg, #904D00, #006780)" }} />
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: "#3D494D", lineHeight: 1.55 }}>
+                {critique.review_summary || "The evaluator has analysed the deck and generated inline analytics."}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ height: 12 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+            <CritiqueList title="Strengths" icon="thumb_up" color="#006780" items={critique.strengths} />
+            <CritiqueList title="Improve" icon="construction" color="#904D00" items={critique.weaknesses} />
+            <CritiqueList title="Next Actions" icon="playlist_add_check" color="#494BD6" items={critique.action_items_to_improve} />
+          </div>
         </div>
       )}
     </div>
@@ -1184,7 +1294,10 @@ function GeneratedOutputs({
   currentUser: UserRead | null;
   grantId: number | null;
 }) {
-  const generated = snapshot?.generated_documents || [];
+  const generated = (snapshot?.generated_documents || []).filter((document) => {
+    const lowerName = document.file_name.toLowerCase();
+    return document.document_type !== "pitch_deck_review" && !lowerName.endsWith(".md");
+  });
   if (!snapshot || !currentUser || !grantId || generated.length === 0) return null;
 
   const iconForDocument = (document: DocumentRead): string => {
@@ -1218,63 +1331,112 @@ function ApplicationChecklist({
   snapshot,
   loading,
   uploadingRequirementId,
+  collapsed,
+  onToggleCollapse,
   onGenerate,
   onUpload,
 }: {
   snapshot: GrantApplicationRead | null;
   loading: boolean;
   uploadingRequirementId?: number | null;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onGenerate: (item: GrantApplicationRead["checklist"][number]) => void;
   onUpload: (item: GrantApplicationRead["checklist"][number], file: File) => void;
 }) {
   const inputRefs = React.useRef<Record<number, HTMLInputElement | null>>({});
 
+  const checklistTone = (item: GrantApplicationRead["checklist"][number]) => {
+    const source = (item.fulfillment_source || "").toLowerCase();
+    if (item.download_url) return { background: "#ECFDF5", color: "#059669", icon: "check_circle" };
+    if (item.fulfilled && source.includes("upload")) return { background: "#ECFDF5", color: "#059669", icon: "check_circle" };
+    if (item.fulfilled && source.includes("generate")) return { background: "#ECFDF5", color: "#059669", icon: "check_circle" };
+    if (item.can_generate && item.can_upload) return { background: "#fff", color: "#006780", icon: "auto_awesome" };
+    if (item.can_generate) return { background: "#fff", color: "#006780", icon: "auto_awesome" };
+    return { background: "#fff", color: "#904D00", icon: "upload_file" };
+  };
+
+  const actionButtons = (item: GrantApplicationRead["checklist"][number]) => {
+    const buttons: React.ReactNode[] = [];
+
+    if (item.can_generate) {
+      buttons.push(
+        <button key="generate" className="btn-primary" style={{ fontSize: 12 }} onClick={() => onGenerate(item)}>
+          <MI name="auto_awesome" size={14} />Generate
+        </button>,
+      );
+    }
+
+    if (item.can_upload) {
+      buttons.push(
+        <React.Fragment key="upload">
+          <input
+            ref={(element) => {
+              inputRefs.current[item.requirement_id] = element;
+            }}
+            type="file"
+            style={{ display: "none" }}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onUpload(item, file);
+              event.currentTarget.value = "";
+            }}
+          />
+          <button
+            type="button"
+            className="btn-soft"
+            style={{ fontSize: 12 }}
+            disabled={uploadingRequirementId === item.requirement_id}
+            onClick={() => inputRefs.current[item.requirement_id]?.click()}
+          >
+            <MI name="upload" size={14} />
+            {uploadingRequirementId === item.requirement_id ? "Uploading" : "Upload"}
+          </button>
+        </React.Fragment>,
+      );
+    }
+
+    if (item.download_url) {
+      buttons.push(
+        <a key="download" href={backendDownloadUrl(item.download_url)} className="btn-soft" style={{ fontSize: 12, textDecoration: "none" }}>
+          <MI name="download" size={14} />Download
+        </a>,
+      );
+    }
+
+    return <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{buttons}</div>;
+  };
+
   return (
     <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
-      <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E", marginBottom: 14 }}>EVALUATOR AGENT CHECKLIST</div>
-      {loading ? (
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: collapsed ? 0 : 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <MI name="assignment" size={17} color="#BA1A1A" />
+          <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E" }}>EVALUATOR AGENT CHECKLIST</div>
+        </div>
+        <button type="button" className="btn-soft" onClick={onToggleCollapse} style={{ fontSize: 11, padding: "4px 8px" }}>
+          <MI name={collapsed ? "unfold_more" : "unfold_less"} size={14} />
+          {collapsed ? "Expand" : "Collapse"}
+        </button>
+      </div>
+      {collapsed ? (
+        <div style={{ color: "#3D494D", fontSize: 13 }}>Checklist collapsed. Expand to review the generated, uploaded, and missing items.</div>
+      ) : loading ? (
         <div style={{ color: "#3D494D", fontSize: 13 }}>Loading checklist...</div>
       ) : !snapshot ? (
         <div style={{ color: "#3D494D", fontSize: 13 }}>No application snapshot loaded.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {snapshot.checklist.map((item) => (
-            <div key={item.requirement_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, border: "1px solid #E0E7EC", borderRadius: 14, background: item.fulfilled ? "#F0FDF4" : "#fff" }}>
-              <MI name={item.fulfilled ? "check_circle" : item.can_generate ? "auto_awesome" : "upload_file"} size={20} color={item.fulfilled ? "#10B981" : item.can_generate ? "#494BD6" : "#904D00"} />
+            <div key={item.requirement_id} style={{ display: "flex", alignItems: "center", gap: 12, padding: 12, border: "1px solid #E0E7EC", borderRadius: 14, background: item.fulfilled ? checklistTone(item).background : "#fff" }}>
+              <MI name={checklistTone(item).icon} size={20} color={checklistTone(item).color} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: "#191C1E" }}>{item.name}</div>
-                <div style={{ fontSize: 11, color: "#3D494D", marginTop: 3 }}>{item.action_label}</div>
+                <div style={{ fontSize: 11, color: "#3D494D", marginTop: 3 }}>
+                  {item.action_label}{item.fulfilled && item.fulfillment_source ? ` · ${item.fulfillment_source}` : ""}
+                </div>
               </div>
-              {item.download_url ? (
-                <a href={backendDownloadUrl(item.download_url)} className="btn-soft" style={{ fontSize: 12, textDecoration: "none" }}><MI name="download" size={14} />Download</a>
-              ) : item.can_generate ? (
-                <button className="btn-primary" style={{ fontSize: 12 }} onClick={() => onGenerate(item)}><MI name="auto_awesome" size={14} />Generate</button>
-              ) : (
-                <>
-                  <input
-                    ref={(element) => {
-                      inputRefs.current[item.requirement_id] = element;
-                    }}
-                    type="file"
-                    style={{ display: "none" }}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) onUpload(item, file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn-soft"
-                    style={{ fontSize: 12 }}
-                    disabled={uploadingRequirementId === item.requirement_id}
-                    onClick={() => inputRefs.current[item.requirement_id]?.click()}
-                  >
-                    <MI name="upload" size={14} />
-                    {uploadingRequirementId === item.requirement_id ? "Uploading" : "Upload"}
-                  </button>
-                </>
-              )}
+              {actionButtons(item)}
             </div>
           ))}
         </div>
@@ -1297,3 +1459,5 @@ function MatchCard({ match, selected, onApply }: { match: RankedGrantRead; selec
     </div>
   );
 }
+
+

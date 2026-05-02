@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { type CompanyProfileRead, type DocumentRead, type UserRead } from "@/services/grantlyApi";
 import s from "./page.module.css";
 
 function MI({ name, size = 24, color }: { name: string; size?: number; color?: string }) {
@@ -681,7 +682,7 @@ function detectSignals(documents: DocumentRead[]): IntelligenceSignal[] {
   });
 }
 
-function buildSuggestedClaim(profile: CompanyProfileRead | null, documents: DocumentRead[]): {
+function buildSuggestedClaim(profile: CompanyProfileRead | null | undefined, documents: DocumentRead[]): {
   agency: string;
   grantName: string;
   claimPeriod: string;

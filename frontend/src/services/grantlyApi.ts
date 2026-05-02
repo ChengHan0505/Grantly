@@ -260,7 +260,6 @@ export type DeckCritiqueRead = {
 export type PitchDeckEvaluationRead = {
   critique: DeckCritiqueRead;
   evaluated_document: DocumentRead;
-  review_document?: DocumentRead | null;
   message: string;
 };
 

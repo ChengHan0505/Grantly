@@ -941,24 +941,6 @@ def _uploaded_pitch_deck_document(db: Session, user_id: int, grant_id: int, docu
     return (grant_specific or uploaded or [None])[0]
 
 
-def _deck_critique_markdown(grant_title: str, document: CompanyDocument, critique: Any) -> str:
-    score_line = f"Overall score: {critique.overall_score}/100\n\n" if critique.overall_score is not None else ""
-    summary = critique.review_summary or "Pitch deck review completed."
-    return (
-        f"# Pitch Deck Review: {grant_title}\n\n"
-        f"Evaluated document: {document.file_name}\n\n"
-        f"{score_line}"
-        f"## Review Summary\n{summary}\n\n"
-        "## Strengths\n"
-        + "\n".join(f"- {item}" for item in critique.strengths)
-        + "\n\n## Improvement Opportunities\n"
-        + "\n".join(f"- {item}" for item in critique.weaknesses)
-        + "\n\n## Action Items\n"
-        + "\n".join(f"- {item}" for item in critique.action_items_to_improve)
-        + "\n"
-    )
-
-
 def _stored_pptx_document(db: Session, user_id: int, grant_id: int) -> CompanyDocument | None:
     candidates = (
         db.query(CompanyDocument)
@@ -1618,27 +1600,10 @@ async def evaluate_pitch_deck(
             detail=f"Failed to evaluate pitch deck: {str(exc)[:200]}",
         )
 
-    review_markdown = _deck_critique_markdown(grant.title, pitch_deck_doc, critique)
-    review_document = _store_generated_markdown(
-        db=db,
-        user_id=user_id,
-        grant_id=grant_id,
-        grant_title=grant.title,
-        document_type="pitch_deck_review",
-        document_name="Pitch Deck Review",
-        content=review_markdown,
-        extra_metadata={
-            "source": "pitch_deck_evaluator_agent",
-            "evaluated_document_id": pitch_deck_doc.id,
-            "critique": critique.model_dump(),
-        },
-    )
-
     return {
         "critique": critique,
         "evaluated_document": pitch_deck_doc,
-        "review_document": review_document,
-        "message": "Pitch Deck Evaluator reviewed the uploaded deck and saved a review document.",
+        "message": "Pitch Deck Evaluator reviewed the uploaded deck and returned inline analytics.",
     }
 
 
