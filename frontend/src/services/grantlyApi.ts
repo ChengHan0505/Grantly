@@ -249,6 +249,21 @@ export type DrafterOutputRead = {
   generated_documents: DocumentRead[];
 };
 
+export type DeckCritiqueRead = {
+  overall_score?: number | null;
+  review_summary?: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  action_items_to_improve: string[];
+};
+
+export type PitchDeckEvaluationRead = {
+  critique: DeckCritiqueRead;
+  evaluated_document: DocumentRead;
+  review_document?: DocumentRead | null;
+  message: string;
+};
+
 export type ScoutStatusRead = {
   status: string;
   run_mode?: string | null;
@@ -498,6 +513,18 @@ export async function draftApplicationBundle(params: {
         extra_context: {},
       }),
     },
+  );
+}
+
+export async function evaluateUploadedPitchDeck(params: {
+  grantId: number;
+  userId: number;
+  documentId?: number | null;
+}): Promise<PitchDeckEvaluationRead> {
+  const query = params.documentId ? `?document_id=${params.documentId}` : "";
+  return requestJson<PitchDeckEvaluationRead>(
+    `/grants/${params.grantId}/application/${params.userId}/pitch-deck/evaluate${query}`,
+    { method: "POST" },
   );
 }
 
