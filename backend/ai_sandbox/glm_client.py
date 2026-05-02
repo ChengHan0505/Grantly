@@ -131,7 +131,19 @@ class GLMClient:
         load_dotenv(PROJECT_DIR / ".env")
         load_dotenv(BACKEND_DIR / ".env", override=False)
         resolved_claude_key = claude_api_key or os.getenv("CLAUDE_SONNET_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-        resolved_key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        gemini_api_keys = _dedupe(
+            [
+                key
+                for key in [
+                    api_key,
+                    os.getenv("GOOGLE_API_KEY"),
+                    os.getenv("GEMINI_API_KEY"),
+                    *_csv_env("GEMINI_FALLBACK_API_KEYS", tuple()),
+                    *_csv_env("GOOGLE_FALLBACK_API_KEYS", tuple()),
+                ]
+                if key
+            ]
+        )
         resolved_openrouter_key = (
             openrouter_api_key
             or os.getenv("OPENROUTER_GEMINI_API_KEY")
@@ -144,7 +156,7 @@ class GLMClient:
             or os.getenv("ZHIPUAI_API_KEY")
             or os.getenv("ILMU_API_KEY")
         )
-        if not resolved_claude_key and not resolved_key and not resolved_openrouter_key and not resolved_zai_key:
+        if not resolved_claude_key and not gemini_api_keys and not resolved_openrouter_key and not resolved_zai_key:
             raise ValueError(
                 "No AI API key is set. Add CLAUDE_SONNET_API_KEY, "
                 "OPENROUTER_GEMINI_API_KEY/OPENROUTER_API_KEY, GOOGLE_API_KEY, "
@@ -163,10 +175,11 @@ class GLMClient:
         self.claude_max_tokens = int(os.getenv("CLAUDE_SONNET_MAX_TOKENS", "8192"))
         self.claude_max_attempts = max(1, int(os.getenv("CLAUDE_SONNET_MAX_ATTEMPTS", "2")))
         self.claude_enabled = _bool_env("CLAUDE_SONNET_ENABLED", True)
-        self.api_key = resolved_key
+        self.api_keys = gemini_api_keys
+        self.api_key = gemini_api_keys[0] if gemini_api_keys else None
         self.model = model or os.getenv("GEMINI_MODEL") or os.getenv("GOOGLE_MODEL") or DEFAULT_MODEL
         fallback_models = _csv_env("GEMINI_FALLBACK_MODELS", DEFAULT_FALLBACK_MODELS)
-        self.models = _dedupe([self.model, *fallback_models]) if self.api_key else []
+        self.models = _dedupe([self.model, *fallback_models]) if self.api_keys else []
         self.base_url = os.getenv("GEMINI_BASE_URL") or GEMINI_BASE_URL
         self.timeout_seconds = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30"))
         self.max_output_tokens = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "8192"))
@@ -373,42 +386,46 @@ class GLMClient:
 
     def _generate_json_via_gemini(self, payload: dict[str, Any]) -> dict[str, Any]:
         last_exc: Exception | None = None
-        exhausted_models: list[str] = []
-        for model_name in self.models:
-            for attempt in range(1, self.max_attempts + 1):
-                try:
-                    response_payload = self._post_generate_content(payload, model_name)
-                    content = self._extract_text_content(response_payload)
-                    return self._parse_json_content(content, provider="Gemini")
-                except GLMClientError:
-                    raise
-                except httpx.HTTPStatusError as exc:
-                    if exc.response.status_code not in _RETRYABLE_STATUS_CODES:
-                        raise GLMClientError(
-                            f"Gemini API call failed: {self._summarize_http_error(exc)}"
-                        ) from exc
-                    last_exc = exc
-                except (httpx.HTTPError, TimeoutError, OSError) as exc:
-                    last_exc = exc
+        exhausted_pairs: list[str] = []
+        total_keys = len(self.api_keys)
+        for key_index, api_key in enumerate(self.api_keys, start=1):
+            for model_name in self.models:
+                for attempt in range(1, self.max_attempts + 1):
+                    try:
+                        response_payload = self._post_generate_content(payload, model_name, api_key)
+                        content = self._extract_text_content(response_payload)
+                        return self._parse_json_content(content, provider="Gemini")
+                    except GLMClientError:
+                        raise
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code not in _RETRYABLE_STATUS_CODES:
+                            raise GLMClientError(
+                                f"Gemini API call failed: {self._summarize_http_error(exc)}"
+                            ) from exc
+                        last_exc = exc
+                    except (httpx.HTTPError, TimeoutError, OSError) as exc:
+                        last_exc = exc
 
-                if attempt < self.max_attempts:
-                    delay = self._retry_delay_seconds(last_exc, attempt)
-                    log.warning(
-                        "Gemini API error for %s. Retrying in %.1fs... (Attempt %d/%d)",
-                        model_name, delay, attempt + 1, self.max_attempts,
-                    )
-                    print(
-                        f"Gemini API error for {model_name}. Retrying in {delay:.1f}s... "
-                        f"(Attempt {attempt + 1}/{self.max_attempts})"
-                    )
-                    time.sleep(delay)
+                    if attempt < self.max_attempts:
+                        delay = self._retry_delay_seconds(last_exc, attempt)
+                        log.warning(
+                            "Gemini API error for %s (key %d/%d). Retrying in %.1fs... (Attempt %d/%d)",
+                            model_name, key_index, total_keys, delay, attempt + 1, self.max_attempts,
+                        )
+                        print(
+                            f"Gemini API error for {model_name} (key {key_index}/{total_keys}). "
+                            f"Retrying in {delay:.1f}s... (Attempt {attempt + 1}/{self.max_attempts})"
+                        )
+                        time.sleep(delay)
 
-            exhausted_models.append(model_name)
-            if model_name != self.models[-1]:
-                log.warning("Gemini model %s exhausted; trying fallback model.", model_name)
+                exhausted_pairs.append(f"{model_name}@key{key_index}")
+                if model_name != self.models[-1]:
+                    log.warning("Gemini model %s exhausted on key %d/%d; trying fallback model.", model_name, key_index, total_keys)
+            if key_index != total_keys:
+                log.warning("Gemini key %d/%d exhausted; trying next configured key.", key_index, total_keys)
 
         if _is_rate_limit_error(last_exc):
-            models = ", ".join(exhausted_models)
+            models = ", ".join(exhausted_pairs)
             raise GeminiRateLimitError(
                 "Gemini rate limit reached for configured models "
                 f"({models}). The app can retry later, use deterministic fallback, "
@@ -537,11 +554,11 @@ class GLMClient:
             response.raise_for_status()
             return response.json()
 
-    def _post_generate_content(self, payload: dict[str, Any], model_name: str) -> dict[str, Any]:
+    def _post_generate_content(self, payload: dict[str, Any], model_name: str, api_key: str) -> dict[str, Any]:
         endpoint = f"{self.base_url.rstrip('/')}/models/{model_name}:generateContent"
         headers = {
             "Content-Type": "application/json",
-            "x-goog-api-key": self.api_key,
+            "x-goog-api-key": api_key,
         }
         with httpx.Client(timeout=self.timeout_seconds) as client:
             response = client.post(endpoint, headers=headers, json=payload)

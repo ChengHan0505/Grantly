@@ -1117,7 +1117,7 @@ function ApplicationRoadmap({
           </div>
         </div>
         <span className={s.tag} style={{ background: "#EAF8FC", color: "#006780" }}>
-          {roadmap.generated_by === "gemini_coach_agent" ? "Gemini Coach" : "Coach fallback"}
+          {roadmap.generated_by === "gemini_coach_agent" ? "Coach" : "Coach fallback"}
         </span>
       </div>
       <div style={{ height: 12 }} />

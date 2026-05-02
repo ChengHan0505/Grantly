@@ -271,6 +271,46 @@ def _money_rm(value: Any, fallback: str = "to be confirmed") -> str:
         return fallback
 
 
+_MISSING_PROPOSAL_VALUES = {
+    "",
+    "0",
+    "0.0",
+    "none",
+    "null",
+    "n/a",
+    "na",
+    "not specified",
+    "to be confirmed",
+    "tbc",
+    "unknown",
+    "undefined",
+}
+
+
+def _proposal_value(value: Any, fallback: str) -> str:
+    if value in (None, [], {}):
+        return fallback
+    cleaned = str(value).strip()
+    if cleaned.lower() in _MISSING_PROPOSAL_VALUES:
+        return fallback
+    return cleaned
+
+
+def _proposal_summary(profile: Any, extracted: dict[str, Any]) -> str:
+    summary = _proposal_value(profile.summary or extracted.get("summary"), "")
+    # Avoid dumping short, comma-separated database fragments such as
+    # "RM50000, enhance quality" into the final PDF.
+    if len(summary.split()) >= 10 and not re.fullmatch(r"[\w\s,.$%-]+", summary):
+        return summary
+    if len(summary.split()) >= 14:
+        return summary
+    return (
+        "The company is positioning this grant-funded project as a disciplined "
+        "capability-building initiative that strengthens delivery quality, "
+        "commercial readiness, and evidence-based execution."
+    )
+
+
 def _safe_upload_filename(filename: str | None) -> str:
     cleaned = re.sub(r"[\\/:*?\"<>|]+", "_", (filename or "uploaded_document").strip())
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
@@ -496,42 +536,162 @@ def _pdf_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
-def _pdf_lines_from_markdown(content: str, width: int = 88) -> list[str]:
-    lines: list[str] = []
-    for raw_line in _plain_text_from_markdown(content).splitlines():
-        if not raw_line.strip():
-            lines.append("")
+# Map common unicode glyphs that Helvetica + WinAnsiEncoding can render
+# (or that we want to flatten to ASCII for safety in PDF text streams).
+_PDF_UNICODE_REPLACEMENTS = {
+    "\u2022": chr(0x95),  # bullet •  -> WinAnsi 0x95
+    "\u2013": "-",        # en dash
+    "\u2014": "--",       # em dash
+    "\u2018": "'",        # left single quote
+    "\u2019": "'",        # right single quote
+    "\u201c": '"',        # left double quote
+    "\u201d": '"',        # right double quote
+    "\u2026": "...",      # ellipsis
+    "\u00a0": " ",        # non-breaking space
+}
+
+
+def _pdf_safe_text(value: str) -> str:
+    for src, dst in _PDF_UNICODE_REPLACEMENTS.items():
+        value = value.replace(src, dst)
+    return value
+
+
+# Per-block typography (in PDF points). char_width is an approximate average
+# glyph width as a fraction of font size, used purely to estimate wrap width.
+_PDF_BLOCK_STYLES: dict[str, dict[str, Any]] = {
+    "h1":     {"font": "F2", "size": 20, "leading": 26, "space_before": 14, "space_after": 12, "indent": 0,  "char_width": 0.58},
+    "h2":     {"font": "F2", "size": 14, "leading": 20, "space_before": 14, "space_after": 6,  "indent": 0,  "char_width": 0.58},
+    "h3":     {"font": "F2", "size": 12, "leading": 17, "space_before": 10, "space_after": 4,  "indent": 0,  "char_width": 0.58},
+    "p":      {"font": "F1", "size": 11, "leading": 15, "space_before": 0,  "space_after": 6,  "indent": 0,  "char_width": 0.53},
+    "bullet": {"font": "F1", "size": 11, "leading": 15, "space_before": 0,  "space_after": 4,  "indent": 16, "char_width": 0.53},
+    "spacer": {"font": "F1", "size": 11, "leading": 8,  "space_before": 0,  "space_after": 0,  "indent": 0,  "char_width": 0.53},
+}
+
+
+def _markdown_blocks(content: str) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for raw_line in content.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped:
+            blocks.append({"type": "spacer"})
             continue
-        lines.extend(textwrap.wrap(raw_line, width=width, break_long_words=False) or [""])
-    return lines
+        if stripped.startswith("### "):
+            blocks.append({"type": "h3", "text": stripped[4:].strip()})
+        elif stripped.startswith("## "):
+            blocks.append({"type": "h2", "text": stripped[3:].strip()})
+        elif stripped.startswith("# "):
+            blocks.append({"type": "h1", "text": stripped[2:].strip()})
+        elif stripped.startswith(("- ", "* ")):
+            blocks.append({"type": "bullet", "text": stripped[2:].strip()})
+        else:
+            blocks.append({"type": "p", "text": stripped})
+    return blocks
+
+
+def _wrap_to_width(text: str, max_width_pt: float, char_width_pt: float) -> list[str]:
+    if max_width_pt <= 0 or char_width_pt <= 0:
+        return [text]
+    chars = max(20, int(max_width_pt / char_width_pt))
+    return textwrap.wrap(text, width=chars, break_long_words=False, replace_whitespace=False) or [""]
 
 
 def _pdf_bytes_from_text(title: str, content: str) -> bytes:
-    all_lines = [title.upper(), ""] + _pdf_lines_from_markdown(content)
-    lines_per_page = 52
-    pages = [all_lines[index : index + lines_per_page] for index in range(0, len(all_lines), lines_per_page)] or [[]]
+    page_width = 595
+    page_height = 842
+    left_margin = 60
+    right_margin = 60
+    top_margin = 60
+    bottom_margin = 60
+    text_width = page_width - left_margin - right_margin
+
+    has_inline_title = bool(content.lstrip().startswith("#"))
+    blocks: list[dict[str, Any]] = []
+    if not has_inline_title and title:
+        blocks.append({"type": "h1", "text": title})
+        blocks.append({"type": "spacer"})
+    blocks.extend(_markdown_blocks(content))
+
+    pages: list[list[tuple[float, float, str, int, str]]] = [[]]
+    y = page_height - top_margin
+
+    def ensure_space(needed: float) -> None:
+        nonlocal y
+        if y - needed < bottom_margin:
+            pages.append([])
+            y = page_height - top_margin
+
+    for block in blocks:
+        block_type = block["type"]
+        style = _PDF_BLOCK_STYLES.get(block_type, _PDF_BLOCK_STYLES["p"])
+
+        if block_type == "spacer":
+            y -= style["leading"]
+            if y < bottom_margin:
+                pages.append([])
+                y = page_height - top_margin
+            continue
+
+        if block.get("text") is None:
+            continue
+
+        text = _pdf_safe_text(block["text"])
+        char_pt_width = style["char_width"] * style["size"]
+
+        if block_type == "bullet":
+            bullet_indent = style["indent"]
+            text_indent = bullet_indent + 14
+            wrapped = _wrap_to_width(text, text_width - text_indent, char_pt_width)
+            y -= style["space_before"]
+            for idx, line in enumerate(wrapped):
+                ensure_space(style["leading"])
+                if idx == 0:
+                    pages[-1].append((left_margin + bullet_indent, y, style["font"], style["size"], chr(0x95)))
+                pages[-1].append((left_margin + text_indent, y, style["font"], style["size"], line))
+                y -= style["leading"]
+            y -= style["space_after"]
+        else:
+            wrapped = _wrap_to_width(text, text_width - style["indent"], char_pt_width)
+            y -= style["space_before"]
+            for line in wrapped:
+                ensure_space(style["leading"])
+                pages[-1].append((left_margin + style["indent"], y, style["font"], style["size"], line))
+                y -= style["leading"]
+            y -= style["space_after"]
 
     objects: dict[int, bytes] = {
         1: b"<< /Type /Catalog /Pages 2 0 R >>",
-        3: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        3: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        4: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     }
     kids: list[int] = []
-    next_object_id = 4
-    for page_lines in pages:
-        commands = ["BT", "/F1 11 Tf", "50 792 Td", "14 TL"]
-        for line in page_lines:
-            if line:
-                commands.append(f"({_pdf_escape(line)}) Tj")
-            commands.append("T*")
-        commands.append("ET")
-        stream = "\n".join(commands).encode("latin-1", "replace")
+    next_object_id = 5
+
+    for page_runs in pages:
+        commands: list[str] = []
+        for x_pos, y_pos, font, size, line in page_runs:
+            if not line:
+                continue
+            commands.append("BT")
+            commands.append(f"/{font} {size} Tf")
+            commands.append(f"1 0 0 1 {x_pos:.2f} {y_pos:.2f} Tm")
+            commands.append(f"({_pdf_escape(line)}) Tj")
+            commands.append("ET")
+        stream = "\n".join(commands).encode("latin-1", "replace") if commands else b""
         content_id = next_object_id
         page_id = next_object_id + 1
         next_object_id += 2
-        objects[content_id] = b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream"
+        objects[content_id] = (
+            b"<< /Length "
+            + str(len(stream)).encode("ascii")
+            + b" >>\nstream\n"
+            + stream
+            + b"\nendstream"
+        )
         objects[page_id] = (
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
-            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {content_id} 0 R >>"
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_width} {page_height}] "
+            f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {content_id} 0 R >>"
         ).encode("ascii")
         kids.append(page_id)
 
@@ -563,56 +723,101 @@ def _professional_business_proposal_markdown(
     extra_context: dict[str, Any] | None = None,
 ) -> str:
     extracted = profile.extracted_data or {}
-    company_name = profile.company_name or "Applicant Company"
-    sector = profile.industry or extracted.get("sector") or "the target sector"
-    summary = profile.summary or "The company is preparing a grant-funded project to strengthen business capability and market readiness."
+    company_name = _proposal_value(profile.company_name, "Applicant Company")
+    sector = _proposal_value(profile.industry or extracted.get("sector"), "the target sector")
+    summary = _proposal_summary(profile, extracted)
     requested_amount = profile.target_grant_amount or extracted.get("requested_funding_rm")
     project_cost = extracted.get("total_project_cost_rm") or requested_amount
-    employees = profile.employee_count or extracted.get("full_time_employees") or "not specified"
-    ownership = profile.nationality or extracted.get("ownership_majority") or "not specified"
+    employees = _proposal_value(profile.employee_count or extracted.get("full_time_employees"), "a focused internal delivery team")
+    ownership = _proposal_value(profile.nationality or extracted.get("ownership_majority"), "a Malaysian SME profile")
     documents = ", ".join(requirement.name for requirement in grant.requirements if requirement.is_required) or "agency-required supporting documents"
-    grant_cap = _money_rm(grant.amount_max, "subject to the grant cap")
-    deadline = grant.application_deadline or "the published application window"
+    requested_amount_text = _money_rm(requested_amount, "a funding amount aligned with the eligible project scope")
+    project_cost_text = _money_rm(project_cost, "a project cost aligned with the implementation plan")
+    grant_cap = _money_rm(grant.amount_max, "the published grant funding parameters")
+    deadline = _proposal_value(grant.application_deadline, "the published application window")
+    provider = _proposal_value(grant.provider_name, "the grant agency")
+    grant_title = _proposal_value(grant.title, "the selected grant programme")
     extra = ""
     if extra_context:
         extra = f"\n\nAdditional submission context: {json.dumps(extra_context, ensure_ascii=True)}"
 
-    return f"""# Business Proposal: {company_name} for {grant.title}
+    return f"""# Business Proposal: {company_name} for {grant_title}
 
-## 1. Executive Summary
-{company_name} is a Malaysian SME operating in {sector}. The company is applying to {grant.provider_name} under {grant.title} to co-fund a practical growth project with direct commercial and capability-building outcomes. The requested support is {_money_rm(requested_amount, "an amount aligned with the eligible funding tier")} against a total project cost of {_money_rm(project_cost)}. The proposal is designed to be executable, auditable, and aligned with the grant objective rather than a general marketing claim.
+## I. Executive Summary
+{company_name} is a Malaysian SME operating in {sector}. The company is applying to {provider} under {grant_title} to co-fund a focused growth initiative with direct commercial, operational, and capability-building outcomes. The requested support is {requested_amount_text} against {project_cost_text}. The purpose of this proposal is not simply to secure subsidy support; it is to demonstrate that the applicant has a clear project thesis, a disciplined execution approach, and a credible pathway to convert grant funding into measurable business value.
 
-## 2. Company Background
+The proposal positions the project as a strategic investment in capability and compliance. It is designed to improve execution quality, strengthen market readiness, and create a stronger evidence base for grant monitoring, claims, and post-award reporting. This makes the application practical for assessment and easier for the grant committee to evaluate against eligibility, impact, and implementation risk.
+
+With the support of {grant_title}, {company_name} can accelerate a capability upgrade that would otherwise need to be implemented more slowly or at a reduced scope. The grant will strengthen the company's execution base, support responsible project delivery, and create a clearer path toward commercial resilience. This proposal is therefore positioned as a serious funding case: practical enough to execute, structured enough to audit, and commercially relevant enough to justify public-sector support.
+
+## II. Company Description
 {summary}
 
-The company profile records {employees} full-time employee(s), ownership or nationality status of {ownership}, and an operating focus in {sector}. These details position the applicant for eligibility screening, while the attached company documents should be used to verify registration, financial standing, and management accountability.
+The company profile records {employees}, an ownership or nationality position of {ownership}, and an operating focus in {sector}. These details support the applicant's eligibility narrative and provide the foundation for grant screening. The attached company documents should be used to verify registration, financial standing, governance accountability, and the organisation's ability to manage public funding responsibly.
 
-## 3. Problem And Opportunity
-The project addresses a measurable business gap: improving execution capacity, market readiness, and delivery quality while reducing the risk of underfunded implementation. Without grant support, the company would need to slow the project, defer key work packages, or reduce the scope of validation. With support from {grant.title}, the applicant can execute the project within a clearer timeline and demonstrate outcomes that are relevant to both the business and the grant agency.
+From an execution standpoint, the applicant is presented as an operating SME with a defined commercial direction rather than an early concept without implementation capacity. The proposal therefore frames the business as fundable, operationally mature, and ready to use the grant as a catalyst for structured growth.
 
-## 4. Proposed Solution
-The applicant will deploy the funding into a focused implementation plan covering product or service enhancement, operational readiness, validation activity, and go-to-market preparation. The solution will be managed internally with accountable milestones, vendor controls where outsourcing is required, and documented evidence for each completed work package. This approach keeps the proposal practical for assessment and easier to audit after award.
+The business operates in an environment where SMEs are expected to become more digital, more productive, and more evidence-driven. This creates pressure on management teams to improve service quality, implementation speed, customer confidence, and reporting discipline at the same time. {company_name}'s application should therefore be viewed as part of a broader capability-building journey rather than a one-off funding request.
 
-## 5. Grant Alignment
-The grant is provided by {grant.provider_name}, with a funding ceiling of {grant_cap}. The company's sector focus, Malaysian SME profile, project funding ask, and required supporting documents are intended to map directly to the published eligibility criteria. Required checklist items for this application include: {documents}. The application should be submitted by {deadline}, subject to portal availability and agency confirmation.
+## III. Products & Services
+The company's product or service direction is anchored in {sector}, with the proposed project intended to improve quality, execution capacity, and market-facing readiness. The grant-funded initiative should strengthen the company's ability to refine its offering, deliver more consistently, and present a clearer value proposition to customers, partners, and grant evaluators.
 
-## 6. Use Of Funds
+The applicant will deploy the funding into a focused implementation plan covering product or service enhancement, operational readiness, validation activity, and go-to-market preparation. The solution is framed as an innovative and sustainable intervention: it strengthens the company's ability to deliver, reduces execution friction, and creates a more credible platform for growth.
+
+The project will be managed through clear internal ownership, milestone-based delivery, and evidence collection for each major work package. Where vendors or outsourced support are required, the company should apply procurement discipline, scope control, and documented acceptance criteria. This approach gives the grant committee confidence that the funds will be deployed with governance rather than treated as general working capital.
+
+The commercial case is strongest when the product or service is positioned not merely as an internal improvement, but as a higher-quality market offering. The project should therefore emphasise better customer outcomes, more reliable delivery, stronger documentation, and the company's ability to translate funded capability into measurable business value.
+
+## IV. Marketing Plan
+### Target Market Research
+The target market should be defined around customers, partners, or users who experience a clear operational or commercial pain point that the company is positioned to solve. For {company_name}, the priority should be to identify customer segments within {sector} that have the highest urgency, shortest adoption cycle, and strongest willingness to pay or participate. Market research should combine desk research, customer discovery, competitor benchmarking, and validation conversations with potential users or channel partners.
+
+The company should evaluate market attractiveness using practical criteria: customer pain severity, budget availability, decision-maker accessibility, procurement complexity, and the potential for repeatable delivery. This avoids an overly broad market claim and helps the proposal demonstrate a credible path from grant-funded capability to commercial traction.
+
+### Competitor Data Collection Plan
+The competitor data collection plan should be systematic and evidence-based. The company should maintain a competitor register covering direct competitors, substitute solutions, pricing signals, service scope, customer segments, delivery channels, and visible differentiators. Sources may include competitor websites, public case studies, marketplace listings, customer interviews, social media activity, tender references, and industry directories.
+
+The purpose of this exercise is not to copy competitors, but to identify where {company_name} can compete more intelligently. The analysis should highlight gaps in service quality, speed, localisation, compliance readiness, affordability, or customer support. These insights can then inform product packaging, pricing, customer messaging, and grant-funded implementation priorities.
+
+### SWOT Analysis
+- Strengths: The company has an operating SME profile, a defined sector focus, and a funding request that can be linked to capability-building outcomes.
+- Weaknesses: As with many SMEs, the business may need stronger documentation, clearer performance metrics, and more formalised evidence of delivery impact.
+- Opportunities: Grant support can accelerate market readiness, strengthen delivery processes, improve customer-facing materials, and support measurable commercial outcomes.
+- Threats: Competitive pressure, supplier delays, documentation gaps, and slower customer adoption could reduce project impact if not actively managed.
+
+The marketing strategy should translate this SWOT analysis into action. The company should prioritise a focused customer segment, communicate a clear value proposition, collect evidence from early delivery, and use grant-funded outputs to improve market credibility. This creates a stronger commercial narrative for both customers and grant reviewers.
+
+## V. Operational Plan
+The operational plan should convert the proposal into a controlled delivery programme. The company should define project owners, work packages, milestones, required documents, supplier responsibilities, internal approval points, and evidence required for grant reporting. This structure helps ensure that the project remains manageable and auditable from approval through implementation.
+
+Implementation should be managed in stages. The first stage should confirm scope, success criteria, procurement requirements, and internal responsibilities. The second stage should execute the core delivery activities and collect evidence of progress. The final stage should validate outcomes, reconcile expenditure, and prepare reporting materials for management and the grant agency.
+
+Operational controls are essential. The company should maintain a simple governance file containing quotations, invoices, milestone approvals, acceptance evidence, meeting notes, and implementation outputs. This protects the project from cost drift, weak documentation, and unclear ownership. It also makes the proposal more credible because it shows that {company_name} understands the administrative discipline required when public funding is involved.
+
+## VI. Management & Organization
+The management and organisation section should present {company_name} as capable of executing the project responsibly. The company profile indicates {employees}, which should be framed as the internal base for coordination, delivery, and accountability. The ownership or nationality position of {ownership} further supports the applicant's eligibility narrative and should be verified through the appropriate supporting documents.
+
+For grant execution, the company should appoint a project lead, a finance or compliance owner, and operational contributors responsible for delivery milestones. The project lead should manage timelines and stakeholder coordination. The finance or compliance owner should track spending, retain documentation, and support claims or reporting. Operational contributors should execute the funded work packages and provide evidence of completion.
+
+This governance model is intentionally practical. It does not require excessive bureaucracy, but it creates clear accountability. Grant evaluators typically want confidence that the applicant can manage funds, deliver outputs, and document outcomes. A simple but disciplined management structure helps address those concerns.
+
+## VII. Startup Expenses & Capitalization
+The grant is provided by {provider}, with a funding ceiling of {grant_cap}. The company's requested support is {requested_amount_text}, and the total project cost is {project_cost_text}. These figures should be presented as part of a disciplined funding plan rather than a general cash request. Required checklist items for this application include: {documents}. The application should be submitted by {deadline}, subject to portal availability and agency confirmation.
+
+The use of funds should be treated as a strategic investment in capability and compliance. The budget should prioritise work packages that directly improve the applicant's ability to deliver, validate, and commercialise the project.
+
 - Project execution and technical delivery: build, configure, test, and deploy the funded work packages.
 - Validation and compliance evidence: prepare measurable proof that the project is delivered responsibly.
 - Commercial readiness: improve materials, pilots, demonstrations, or customer-facing readiness needed for adoption.
 - Reporting and governance: maintain documentation for claims, procurement records, milestone evidence, and post-award reporting.
+- Capability transfer: ensure the company retains knowledge, operating discipline, and reusable processes after the funded work is complete.
 
-## 7. Implementation Timeline And KPIs
-- Month 1: finalize project scope, suppliers, internal owners, and compliance checklist.
-- Months 2-3: execute the main delivery work packages and collect milestone evidence.
-- Month 4: complete validation, financial reconciliation, and outcome reporting.
-- KPIs: delivery of agreed milestones, evidence-ready documentation, controlled use of funds, improved operational capacity, and a clearer path to revenue or adoption.
+Capitalisation should be framed around responsible leverage. Grant funding reduces the burden on internal cash flow while allowing the company to execute a more complete, higher-quality project. The applicant should still demonstrate responsible ownership of the project through internal coordination, management time, documentation discipline, and readiness to comply with grant conditions.
 
-## 8. Risk Management
-Key risks include delayed documentation, supplier delivery risk, cost variance, and insufficient evidence for claims. The company will mitigate these risks through early document collection, milestone-based vendor management, budget tracking, and a single internal owner for grant compliance. Any scope changes should be documented before submission or claim activity.
+## VIII. Conclusion
+{company_name} respectfully requests consideration for {grant_title}. The requested funding will help convert a defined business need into a controlled implementation project with measurable outcomes, stronger SME capability, and clearer evidence for agency review.
 
-## 9. Closing Request
-{company_name} respectfully requests consideration for {grant.title}. The requested funding will help convert a defined business need into a controlled implementation project with measurable outcomes, stronger SME capability, and clearer evidence for agency review.{extra}
+The application should be viewed as a practical, fundable proposal: it connects a real operating need to a structured use of funds, defines an implementation path, and recognises the importance of governance. With grant support, the company can accelerate a capability upgrade that strengthens both commercial resilience and long-term competitiveness.{extra}
 """
 
 
