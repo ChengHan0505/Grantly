@@ -25,7 +25,7 @@ def _full_profile() -> dict:
 
 
 def test_empty_profile_scores_zero():
-    assert evaluate_profile_readiness({}, []) == 1.0
+    assert evaluate_profile_readiness({}, []) == 0.0
 
 
 def test_score_bounded_0_to_100():

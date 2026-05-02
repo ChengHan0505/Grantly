@@ -1,7 +1,12 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app
+try:
+    from backend.main import app
+except RuntimeError as exc:
+    if 'Form data requires "python-multipart" to be installed.' in str(exc):
+        pytest.skip("python-multipart is required for API integration tests", allow_module_level=True)
+    raise
 
 
 client = TestClient(app)

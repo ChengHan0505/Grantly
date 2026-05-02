@@ -23,7 +23,7 @@ from backend.src.core.dag_router import (
 
 def test_readiness_threshold_is_80():
     """P1 Critical: The routing threshold must be exactly 80."""
-    assert READINESS_THRESHOLD_PERCENT == 81
+    assert READINESS_THRESHOLD_PERCENT == 80
 
 
 # ──────────────────────────────────────────────────────────────────────────────
