@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   backendDownloadUrl,
   draftApplicationBundle,
+  evaluateUploadedPitchDeck,
   generateApplicationDocument,
   generatePitchDeck,
   getApplicationRoadmap,
@@ -16,6 +17,7 @@ import {
   type DocumentRead,
   type GrantApplicationRead,
   type GrantRead,
+  type PitchDeckEvaluationRead,
   type RankedGrantRead,
   type ScoutStatusRead,
   type UserRead,
@@ -38,7 +40,10 @@ type DashboardDataProps = {
 
 function formatAmount(grant: GrantRead): string {
   const formatter = new Intl.NumberFormat("en-MY", { maximumFractionDigits: 0 });
-  if (grant.amount_min && grant.amount_max) return `RM ${formatter.format(grant.amount_min)}-${formatter.format(grant.amount_max)}`;
+  if (grant.amount_min && grant.amount_max) {
+    if (grant.amount_min === grant.amount_max) return `RM ${formatter.format(grant.amount_min)}`;
+    return `RM ${formatter.format(grant.amount_min)}-${formatter.format(grant.amount_max)}`;
+  }
   if (grant.amount_max) return `Up to RM ${formatter.format(grant.amount_max)}`;
   if (grant.amount_min) return `From RM ${formatter.format(grant.amount_min)}`;
   return "Amount TBC";
@@ -353,8 +358,8 @@ function FeedCard({ match, accent, onViewDetails }: { match: RankedGrantRead; ac
         <div style={{ fontSize: 15, fontWeight: 900, color: "#191C1E", marginTop: 8 }}>{match.grant.title}</div>
         <div style={{ fontSize: 11, color: "#3D494D", marginTop: 4 }}>{formatDeadline(match.grant.application_deadline)}</div>
       </div>
-      <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <div style={{ fontSize: 16, fontWeight: 900, color: "#006780" }}>{formatAmount(match.grant)}</div>
+      <div style={{ textAlign: "right", flexShrink: 0, maxWidth: 140 }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: "#006780", wordWrap: "break-word", overflowWrap: "break-word", wordBreak: "break-word" }}>{formatAmount(match.grant)}</div>
         <button className="btn-outline-sm" onClick={onViewDetails} style={{ marginTop: 10, padding: "6px 14px", fontSize: 12 }}>View Details</button>
       </div>
     </div>
@@ -381,7 +386,7 @@ function GrantModal({ grant, onClose, onApply }: { grant: RankedGrantRead; onClo
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24, gap: 20 }}>
               <div>
                 <div style={{ fontSize: 12, color: "#6D797E", fontWeight: 700, marginBottom: 4 }}>GRANT AMOUNT</div>
-                <div style={{ fontSize: 24, fontWeight: 900, color: accent }}>{formatAmount(grant.grant)}</div>
+                <div style={{ fontSize: 24, fontWeight: 900, color: accent, wordWrap: "break-word", overflowWrap: "break-word", wordBreak: "break-word" }}>{formatAmount(grant.grant)}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 12, color: "#6D797E", fontWeight: 700, marginBottom: 4 }}>DEADLINE</div>
@@ -466,6 +471,7 @@ export function GrantTab({
   currentUser,
   rankedGrants,
   allGrants = [],
+  documents,
   focusGrantId,
   onRefresh,
 }: DashboardDataProps & { focusGrantId?: number | null; onRefresh?: () => void }) {
@@ -480,6 +486,10 @@ export function GrantTab({
   const [scoutStatus, setScoutStatus] = React.useState<ScoutStatusRead | null>(null);
   const [scoutRunning, setScoutRunning] = React.useState(false);
   const [uploadingRequirementId, setUploadingRequirementId] = React.useState<number | null>(null);
+  const [uploadingPitchDeck, setUploadingPitchDeck] = React.useState(false);
+  const [evaluatingPitchDeck, setEvaluatingPitchDeck] = React.useState(false);
+  const [pitchDeckEvaluation, setPitchDeckEvaluation] = React.useState<PitchDeckEvaluationRead | null>(null);
+  const pitchDeckUploadRef = React.useRef<HTMLInputElement | null>(null);
 
   const effectiveGrantId = selectedGrantId ?? focusGrantId ?? rankedGrants[0]?.grant.id ?? grantLibrary[0]?.id ?? null;
 
@@ -495,7 +505,10 @@ export function GrantTab({
       setError("");
       getGrantApplication(effectiveGrantId, currentUser.id)
         .then((result) => {
-          if (!cancelled) setSnapshot(result);
+          if (!cancelled) {
+            setSnapshot(result);
+            setPitchDeckEvaluation(null);
+          }
         })
         .catch((err: unknown) => {
           if (!cancelled) setError(err instanceof Error ? err.message : "Unable to load application checklist.");
@@ -619,6 +632,55 @@ export function GrantTab({
     }
   };
 
+  const pitchDeckChecklistItem = snapshot?.checklist.find((item) => item.document_type === "pitch_deck");
+
+  const handleUploadPitchDeck = async (file: File) => {
+    if (!currentUser || !effectiveGrantId) return;
+    setUploadingPitchDeck(true);
+    setActionStatus(`Uploading ${file.name} for pitch deck review...`);
+    setError("");
+    setPitchDeckEvaluation(null);
+    try {
+      await uploadApplicationDocument({
+        grantId: effectiveGrantId,
+        userId: currentUser.id,
+        file,
+        documentType: "pitch_deck",
+        documentName: "Uploaded Pitch Deck",
+        requirementId: pitchDeckChecklistItem?.requirement_id,
+      });
+      setActionStatus(`${file.name} uploaded. Pitch Deck Evaluator can review it now.`);
+      await refreshSnapshot();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to upload pitch deck.");
+      setActionStatus("");
+    } finally {
+      setUploadingPitchDeck(false);
+    }
+  };
+
+  const handleEvaluatePitchDeck = async (documentId?: number) => {
+    if (!currentUser || !effectiveGrantId) return;
+    setEvaluatingPitchDeck(true);
+    setActionStatus("Pitch Deck Evaluator is reviewing the uploaded deck...");
+    setError("");
+    try {
+      const result = await evaluateUploadedPitchDeck({
+        grantId: effectiveGrantId,
+        userId: currentUser.id,
+        documentId,
+      });
+      setPitchDeckEvaluation(result);
+      setActionStatus(result.message);
+      await refreshSnapshot();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unable to evaluate the uploaded pitch deck.");
+      setActionStatus("");
+    } finally {
+      setEvaluatingPitchDeck(false);
+    }
+  };
+
   const handleRunScoutAgent = async () => {
     setScoutRunning(true);
     setActionStatus("Running Scout Agent on curated grant files...");
@@ -727,6 +789,17 @@ export function GrantTab({
             onUpload={handleUploadDocument}
           />
           <div style={{ height: 16 }} />
+          <PitchDeckEvaluationPanel
+            snapshot={snapshot}
+            documents={documents}
+            evaluation={pitchDeckEvaluation}
+            uploading={uploadingPitchDeck}
+            evaluating={evaluatingPitchDeck}
+            uploadInputRef={pitchDeckUploadRef}
+            onUpload={handleUploadPitchDeck}
+            onEvaluate={handleEvaluatePitchDeck}
+          />
+          <div style={{ height: 16 }} />
           <GeneratedOutputs snapshot={snapshot} currentUser={currentUser} grantId={effectiveGrantId} />
           <div style={{ height: 16 }} />
           <GrantLibrary
@@ -795,7 +868,7 @@ function GrantLibrary({
             <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E" }}>COMPLETE GRANT LIBRARY</div>
           </div>
           <div style={{ color: "#3D494D", fontSize: 12, marginTop: 5 }}>
-            Scout Agent syncs curated grant files into the database; Evaluator turns each grant's requirements into a checklist.
+            Scout Agent syncs curated grant files into the database; Evaluator turns each grant&apos;s requirements into a checklist.
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -939,6 +1012,127 @@ function ApplicationRoadmap({ roadmap, loading }: { roadmap: ApplicationRoadmapR
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function PitchDeckEvaluationPanel({
+  snapshot,
+  documents,
+  evaluation,
+  uploading,
+  evaluating,
+  uploadInputRef,
+  onUpload,
+  onEvaluate,
+}: {
+  snapshot: GrantApplicationRead | null;
+  documents: DocumentRead[];
+  evaluation: PitchDeckEvaluationRead | null;
+  uploading: boolean;
+  evaluating: boolean;
+  uploadInputRef: React.RefObject<HTMLInputElement | null>;
+  onUpload: (file: File) => void;
+  onEvaluate: (documentId?: number) => void;
+}) {
+  const documentLookup = new Map<number, DocumentRead>();
+  for (const document of [...documents, ...(snapshot?.attached_documents || [])]) {
+    documentLookup.set(document.id, document);
+  }
+  const uploadedDecks = [...documentLookup.values()]
+    .filter((document) => document.document_type === "pitch_deck" && document.status !== "generated")
+    .slice()
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const uploadedDeck = uploadedDecks[0] || null;
+  const storedReview = (snapshot?.generated_documents || []).find((document) => document.document_type === "pitch_deck_review") || null;
+  const critique = evaluation?.critique || null;
+
+  return (
+    <div className={s.panel} style={{ borderRadius: 26, padding: 18 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <MI name="fact_check" size={17} color="#494BD6" />
+            <div style={{ fontWeight: 900, letterSpacing: 1, fontSize: 13, color: "#191C1E" }}>PITCH DECK EVALUATOR</div>
+          </div>
+          <div style={{ color: "#3D494D", fontSize: 12, marginTop: 5 }}>
+            Upload your own deck and get constructive grant-readiness feedback.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".pptx,.pdf,.txt,.md,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/pdf,text/plain,text/markdown"
+            style={{ display: "none" }}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onUpload(file);
+              event.currentTarget.value = "";
+            }}
+          />
+          <button type="button" className="btn-soft" disabled={uploading} onClick={() => uploadInputRef.current?.click()} style={{ fontSize: 12 }}>
+            <MI name="upload_file" size={14} />{uploading ? "Uploading" : "Upload Deck"}
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={!uploadedDeck || evaluating}
+            onClick={() => uploadedDeck && onEvaluate(uploadedDeck.id)}
+            style={{ fontSize: 12, opacity: !uploadedDeck || evaluating ? 0.65 : 1 }}
+          >
+            <MI name="rate_review" size={14} color="#fff" />{evaluating ? "Reviewing" : "Evaluate Deck"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ height: 14 }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+        <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
+          <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>UPLOADED DECK</div>
+          <div style={{ color: "#191C1E", fontSize: 13, fontWeight: 800, marginTop: 6, overflowWrap: "anywhere" }}>
+            {uploadedDeck?.file_name || "No uploaded pitch deck yet"}
+          </div>
+          <div style={{ color: "#3D494D", fontSize: 12, marginTop: 6 }}>
+            {uploadedDeck ? "This deck will be reviewed against the selected grant." : "Use Upload Deck to attach your own PPTX, PDF, TXT, or MD file."}
+          </div>
+        </div>
+        <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
+          <div style={{ color: "#5F6E84", fontSize: 11, fontWeight: 900, letterSpacing: 1 }}>LATEST REVIEW</div>
+          <div style={{ color: critique?.overall_score !== undefined && critique?.overall_score !== null ? "#494BD6" : "#3D494D", fontSize: 24, fontWeight: 900, marginTop: 4 }}>
+            {critique?.overall_score !== undefined && critique?.overall_score !== null ? `${critique.overall_score}%` : storedReview ? "Saved" : "Pending"}
+          </div>
+          <div style={{ color: "#3D494D", fontSize: 12, lineHeight: 1.45 }}>
+            {critique?.review_summary || (storedReview ? "A saved review is available in generated outputs." : "Run the evaluator after uploading a deck.")}
+          </div>
+        </div>
+      </div>
+
+      {critique && (
+        <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          <CritiqueList title="Strengths" icon="thumb_up" color="#006780" items={critique.strengths} />
+          <CritiqueList title="Improve" icon="construction" color="#904D00" items={critique.weaknesses} />
+          <CritiqueList title="Next Actions" icon="playlist_add_check" color="#494BD6" items={critique.action_items_to_improve} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CritiqueList({ title, icon, color, items }: { title: string; icon: string; color: string; items: string[] }) {
+  return (
+    <div style={{ border: "1px solid #E0E7EC", borderRadius: 14, padding: 12, background: "#fff" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color, fontSize: 12, fontWeight: 900, letterSpacing: 1 }}>
+        <MI name={icon} size={14} color={color} />{title.toUpperCase()}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+        {items.slice(0, 4).map((item, index) => (
+          <div key={`${title}-${index}`} style={{ display: "flex", gap: 8, color: "#3D494D", fontSize: 12, lineHeight: 1.4 }}>
+            <span style={{ color, fontWeight: 900 }}>{index + 1}</span>
+            <span>{item}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -84,6 +84,8 @@ class DeckSlide(BaseModel):
 
 
 class DeckCritique(BaseModel):
+    overall_score: int | None = None
+    review_summary: str | None = None
     strengths: List[str]
     weaknesses: List[str]
     action_items_to_improve: List[str]

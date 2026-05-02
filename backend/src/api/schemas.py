@@ -308,9 +308,18 @@ class SlideContentRead(BaseModel):
 
 
 class DeckCritiqueRead(BaseModel):
+    overall_score: int | None = None
+    review_summary: str | None = None
     strengths: list[str]
     weaknesses: list[str]
     action_items_to_improve: list[str]
+
+
+class PitchDeckEvaluationRead(BaseModel):
+    critique: DeckCritiqueRead
+    evaluated_document: DocumentRead
+    review_document: DocumentRead | None = None
+    message: str
 
 
 class DrafterOutputRead(BaseModel):

@@ -285,11 +285,19 @@ def create_grant(db: Session, grant_data: dict) -> Grant:
     return grant
 
 
+def _requirement_source(value: object) -> RequirementSource:
+    try:
+        return RequirementSource(value)
+    except (TypeError, ValueError):
+        return RequirementSource.ATTACHED
+
+
 def upsert_grant_from_scout(db: Session, grant_data: dict) -> tuple[Grant, bool]:
-    requirements_data = grant_data.pop("requirements", [])
-    source_url = grant_data.get("source_url")
-    title = grant_data.get("title")
-    provider_name = grant_data.get("provider_name")
+    grant_payload = dict(grant_data)
+    requirements_data = grant_payload.pop("requirements", [])
+    source_url = grant_payload.get("source_url")
+    title = grant_payload.get("title")
+    provider_name = grant_payload.get("provider_name")
 
     grant = None
     if source_url:
@@ -304,12 +312,12 @@ def upsert_grant_from_scout(db: Session, grant_data: dict) -> tuple[Grant, bool]
 
     created = False
     if grant is None:
-        grant = Grant(**grant_data)
+        grant = Grant(**grant_payload)
         db.add(grant)
         db.flush()
         created = True
     else:
-        for key, value in grant_data.items():
+        for key, value in grant_payload.items():
             setattr(grant, key, value)
         db.query(GrantRequirement).filter(GrantRequirement.grant_id == grant.id).delete()
 
@@ -319,11 +327,12 @@ def upsert_grant_from_scout(db: Session, grant_data: dict) -> tuple[Grant, bool]
                 grant_id=grant.id,
                 name=requirement["name"],
                 description=requirement.get("description"),
-                source_type=RequirementSource(requirement["source_type"]),
+                source_type=_requirement_source(requirement.get("source_type")),
                 document_type=requirement.get("document_type"),
                 is_required=requirement.get("is_required", True),
             )
         )
+    db.flush()
     return grant, created
 
 

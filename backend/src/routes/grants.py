@@ -10,12 +10,14 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.ai_sandbox.coach import run_coach
+from backend.ai_sandbox.pitch_deck_evaluator import run_pitch_deck_evaluator
 from backend.ai_sandbox.scout.runner import run_scout
 from backend.ai_sandbox.scout.sources import (
     check_sources_health_from_sources,
@@ -45,6 +47,7 @@ from backend.src.api.schemas import (
     GrantApplicationRead,
     GrantCreate,
     GrantRead,
+    PitchDeckEvaluationRead,
     PitchDeckGenerateRequest,
     PitchDeckRequest,
     RankedGrantRead,
@@ -163,29 +166,39 @@ def _run_scout_job(source_file: str | None, run_mode: str, max_links_per_page: i
             elapsed_hours = (datetime.now(timezone.utc) - start_time).total_seconds() / 3600
             return bool(SCOUT_STATE["stop_requested"]) or elapsed_hours >= settings.scout_max_runtime_hours
 
-        report = run_scout(
-            db,
-            source_file=source_file,
-            sources_override=None,
-            curated_files=_curated_source_files() if run_mode == "curated" else None,
-            max_links_per_page_override=max_links_per_page,
-            should_stop=should_stop,
-        )
-        SCOUT_STATE.update(
-            {
-                "status": report.get("status", "completed"),
-                "finished_at": _utc_now_iso(),
-                "last_report": report,
-                "message": "Scout run finished.",
-            }
-        )
+        try:
+            report = run_scout(
+                db,
+                source_file=source_file,
+                sources_override=None,
+                curated_files=_curated_source_files() if run_mode == "curated" else None,
+                max_links_per_page_override=max_links_per_page,
+                should_stop=should_stop,
+            )
+            SCOUT_STATE.update(
+                {
+                    "status": report.get("status", "completed"),
+                    "finished_at": _utc_now_iso(),
+                    "last_report": report,
+                    "message": "Scout run finished.",
+                }
+            )
+        except Exception as scout_exc:  # noqa: BLE001
+            db.rollback()
+            SCOUT_STATE.update(
+                {
+                    "status": "error",
+                    "finished_at": _utc_now_iso(),
+                    "message": f"Scout run failed: {str(scout_exc)[:500]}",
+                }
+            )
+            raise
     except Exception as exc:  # noqa: BLE001
-        db.rollback()
         SCOUT_STATE.update(
             {
                 "status": "error",
                 "finished_at": _utc_now_iso(),
-                "message": f"Scout run failed: {exc}",
+                "message": f"Scout background task error: {str(exc)[:500]}",
             }
         )
     finally:
@@ -816,6 +829,136 @@ def _store_generated_pptx(
     )
 
 
+def _extract_pptx_text(content: bytes) -> str:
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as deck:
+            slide_names = sorted(
+                (name for name in deck.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", name)),
+                key=lambda value: int(re.search(r"slide(\d+)\.xml$", value).group(1)),
+            )
+            notes_names = sorted(
+                (name for name in deck.namelist() if re.match(r"ppt/notesSlides/notesSlide\d+\.xml$", name)),
+                key=lambda value: int(re.search(r"notesSlide(\d+)\.xml$", value).group(1)),
+            )
+            chunks: list[str] = []
+            for index, name in enumerate(slide_names, start=1):
+                slide_text = _text_from_office_xml(deck.read(name))
+                if slide_text:
+                    chunks.append(f"Slide {index}: {slide_text}")
+            for index, name in enumerate(notes_names, start=1):
+                notes_text = _text_from_office_xml(deck.read(name))
+                if notes_text:
+                    chunks.append(f"Speaker notes {index}: {notes_text}")
+            return "\n".join(chunks)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _text_from_office_xml(payload: bytes) -> str:
+    try:
+        root = ElementTree.fromstring(payload)
+    except ElementTree.ParseError:
+        return ""
+    values = [
+        node.text.strip()
+        for node in root.iter()
+        if node.tag.endswith("}t") and node.text and node.text.strip()
+    ]
+    return " ".join(values)
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    text_chunks = []
+    for match in re.findall(rb"\(([^()]{3,240})\)\s*T[Jj]", content):
+        decoded = match.decode("latin-1", errors="ignore").strip()
+        if decoded:
+            text_chunks.append(decoded)
+    if text_chunks:
+        return " ".join(text_chunks)
+    decoded = content.decode("latin-1", errors="ignore")
+    readable = re.findall(r"[A-Za-z0-9][A-Za-z0-9 ,.:%()/+\-]{8,}", decoded)
+    return " ".join(readable[:120])
+
+
+def _text_from_uploaded_pitch_deck(document: CompanyDocument) -> str:
+    metadata = document.metadata_json or {}
+    for key in ("extracted_text", "content_markdown", "preview_text", "text"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:24000]
+
+    content_base64 = metadata.get("content_base64")
+    if not isinstance(content_base64, str) or not content_base64:
+        return _deck_metadata_text(document)
+
+    try:
+        content = base64.b64decode(content_base64)
+    except Exception:  # noqa: BLE001
+        return _deck_metadata_text(document)
+
+    content_type = str(metadata.get("content_type") or "").lower()
+    file_name = document.file_name.lower()
+    if file_name.endswith(".pptx") or content_type == PPTX_MIME:
+        extracted = _extract_pptx_text(content)
+    elif file_name.endswith(".pdf") or content_type == PDF_MIME:
+        extracted = _extract_pdf_text(content)
+    elif content_type.startswith("text/") or file_name.endswith((".txt", ".md", ".csv", ".json")):
+        extracted = content.decode("utf-8", errors="replace")
+    else:
+        extracted = content.decode("utf-8", errors="ignore")
+
+    extracted = re.sub(r"\s+", " ", extracted).strip()
+    return extracted[:24000] if len(extracted) >= 40 else _deck_metadata_text(document)
+
+
+def _deck_metadata_text(document: CompanyDocument) -> str:
+    metadata = document.metadata_json or {}
+    return (
+        f"Pitch deck upload: {document.file_name}\n"
+        f"Document status: {document.status}\n"
+        f"Content type: {metadata.get('content_type') or 'unknown'}\n"
+        f"File size: {metadata.get('size_bytes') or 'unknown'} bytes\n"
+        "Full slide text could not be extracted automatically. Review should focus on the file metadata and request a readable PPTX, TXT, or PDF export if needed."
+    )
+
+
+def _uploaded_pitch_deck_document(db: Session, user_id: int, grant_id: int, document_id: int | None = None) -> CompanyDocument | None:
+    query = (
+        db.query(CompanyDocument)
+        .filter(CompanyDocument.user_id == user_id)
+        .filter(CompanyDocument.document_type == "pitch_deck")
+    )
+    if document_id is not None:
+        return query.filter(CompanyDocument.id == document_id).first()
+
+    candidates = query.order_by(CompanyDocument.created_at.desc()).all()
+    uploaded = [document for document in candidates if document.status != "generated"]
+    grant_specific = [
+        document
+        for document in uploaded
+        if (document.metadata_json or {}).get("grant_id") == grant_id
+    ]
+    return (grant_specific or uploaded or [None])[0]
+
+
+def _deck_critique_markdown(grant_title: str, document: CompanyDocument, critique: Any) -> str:
+    score_line = f"Overall score: {critique.overall_score}/100\n\n" if critique.overall_score is not None else ""
+    summary = critique.review_summary or "Pitch deck review completed."
+    return (
+        f"# Pitch Deck Review: {grant_title}\n\n"
+        f"Evaluated document: {document.file_name}\n\n"
+        f"{score_line}"
+        f"## Review Summary\n{summary}\n\n"
+        "## Strengths\n"
+        + "\n".join(f"- {item}" for item in critique.strengths)
+        + "\n\n## Improvement Opportunities\n"
+        + "\n".join(f"- {item}" for item in critique.weaknesses)
+        + "\n\n## Action Items\n"
+        + "\n".join(f"- {item}" for item in critique.action_items_to_improve)
+        + "\n"
+    )
+
+
 def _stored_pptx_document(db: Session, user_id: int, grant_id: int) -> CompanyDocument | None:
     candidates = (
         db.query(CompanyDocument)
@@ -1192,10 +1335,37 @@ def get_grant_scout_status():
 
 @router.post("/scout/run")
 def run_grant_scout(db: Session = Depends(get_db)):
+    SCOUT_STATE.update(
+        {
+            "status": "running",
+            "run_mode": "curated",
+            "started_at": _utc_now_iso(),
+            "finished_at": None,
+            "stop_requested": False,
+            "message": "Scout is syncing curated grant data into the database.",
+        }
+    )
     report = run_scout(db, curated_files=_curated_source_files())
+    finished_at = _utc_now_iso()
     if report.get("status") == "error":
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=report["message"])
-    SCOUT_STATE.update({"status": report.get("status", "ok"), "last_report": report, "finished_at": _utc_now_iso()})
+        message = "; ".join(str(error) for error in report.get("errors", [])[:3]) or "Scout run failed."
+        SCOUT_STATE.update(
+            {
+                "status": "error",
+                "finished_at": finished_at,
+                "last_report": report,
+                "message": message,
+            }
+        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=message)
+    SCOUT_STATE.update(
+        {
+            "status": report.get("status", "ok"),
+            "last_report": report,
+            "finished_at": finished_at,
+            "message": "Scout run finished and the grant database is ready.",
+        }
+    )
     return report
 
 
@@ -1379,6 +1549,97 @@ async def upload_application_document(
         },
     )
     return document
+
+
+@router.post("/{grant_id}/application/{user_id}/pitch-deck/evaluate", response_model=PitchDeckEvaluationRead)
+async def evaluate_pitch_deck(
+    grant_id: int,
+    user_id: int,
+    document_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    if get_user_by_id(db, user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+    grant = get_grant_by_id(db, grant_id)
+    if grant is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Grant not found.")
+
+    profile = get_company_profile(db, user_id)
+    if profile is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company profile not found.")
+
+    pitch_deck_doc = _uploaded_pitch_deck_document(db, user_id, grant_id, document_id)
+    if pitch_deck_doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No uploaded pitch deck found. Upload your own pitch deck before running the evaluator.",
+        )
+
+    if pitch_deck_doc.status == "generated":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Evaluator reviews user-uploaded pitch decks. Upload your own deck instead of evaluating a generated deck.",
+        )
+
+    deck_text = _text_from_uploaded_pitch_deck(pitch_deck_doc)
+    grant_context = {
+        "grant_name": grant.title,
+        "provider_name": grant.provider_name,
+        "description": grant.description or "",
+        "amount_max": grant.amount_max,
+        "amount_min": grant.amount_min,
+        "eligibility_notes": grant.eligibility_notes,
+        "application_deadline": grant.application_deadline,
+        "mandatory_documents": [requirement.name for requirement in grant.requirements if requirement.is_required],
+    }
+    sme_context = {
+        "company_name": profile.company_name,
+        "industry": profile.industry,
+        "nationality": profile.nationality,
+        "employee_count": profile.employee_count,
+        "business_stage": profile.business_stage,
+        "target_grant_amount": profile.target_grant_amount,
+        "summary": profile.summary,
+    }
+
+    try:
+        critique = await asyncio.wait_for(
+            run_pitch_deck_evaluator(deck_text, grant_context=grant_context, sme_context=sme_context),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Pitch deck evaluation took too long. Please try again.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to evaluate pitch deck: {str(exc)[:200]}",
+        )
+
+    review_markdown = _deck_critique_markdown(grant.title, pitch_deck_doc, critique)
+    review_document = _store_generated_markdown(
+        db=db,
+        user_id=user_id,
+        grant_id=grant_id,
+        grant_title=grant.title,
+        document_type="pitch_deck_review",
+        document_name="Pitch Deck Review",
+        content=review_markdown,
+        extra_metadata={
+            "source": "pitch_deck_evaluator_agent",
+            "evaluated_document_id": pitch_deck_doc.id,
+            "critique": critique.model_dump(),
+        },
+    )
+
+    return {
+        "critique": critique,
+        "evaluated_document": pitch_deck_doc,
+        "review_document": review_document,
+        "message": "Pitch Deck Evaluator reviewed the uploaded deck and saved a review document.",
+    }
 
 
 @router.post("/{grant_id}/application/{user_id}/draft", response_model=DrafterOutputRead)

@@ -19,6 +19,20 @@ from .sources import load_sources_from_file
 from .storage import persist_raw_results, persist_report
 
 
+def _grant_title(record: object) -> str:
+    if hasattr(record, "title"):
+        return str(getattr(record, "title") or "unknown")
+    if isinstance(record, dict):
+        return str(record.get("title") or "unknown")
+    return "unknown"
+
+
+def _upsert_normalized_grant(db: Session, normalized) -> bool:
+    with db.begin_nested():
+        _, created = upsert_grant_from_scout(db, normalized.model_dump(mode="python"))
+    return created
+
+
 def _summarize_extraction_error(exc: Exception) -> str:
     text = str(exc).replace("\n", " ").strip()
     if "401" in text:
@@ -167,15 +181,22 @@ def run_scout(
                     else:
                         grants_found_unknown += 1
                     all_records.append(normalized)
-                    _, created = upsert_grant_from_scout(db, normalized.model_dump(mode="python"))
-                    if created:
-                        grants_inserted += 1
-                    else:
-                        grants_updated += 1
+                    try:
+                        created = _upsert_normalized_grant(db, normalized)
+                        if created:
+                            grants_inserted += 1
+                        else:
+                            grants_updated += 1
+                    except Exception as db_exc:  # noqa: BLE001
+                        errors.append(f"{source.name}: failed to save grant '{_grant_title(normalized)}' to database ({db_exc})")
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"{source.name}: extraction failed for {page['url']} ({exc})")
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as commit_exc:  # noqa: BLE001
+        errors.append(f"Failed to commit grants to database: {commit_exc}")
+        db.rollback()
     stopped = should_stop() if should_stop else False
     raw_path = persist_raw_results(str(results_dir), all_records)
     report = {
@@ -217,15 +238,22 @@ def _ingest_curated_grants(db: Session, curated_files: list[str]) -> dict:
             else:
                 grants_found_unknown += 1
             all_records.append(normalized)
-            _, created = upsert_grant_from_scout(db, normalized.model_dump(mode="python"))
-            if created:
-                grants_inserted += 1
-            else:
-                grants_updated += 1
-        db.commit()
+            try:
+                created = _upsert_normalized_grant(db, normalized)
+                if created:
+                    grants_inserted += 1
+                else:
+                    grants_updated += 1
+            except Exception as db_exc:  # noqa: BLE001
+                errors.append(f"Failed to save grant '{_grant_title(normalized)}' to database: {db_exc}")
+        try:
+            db.commit()
+        except Exception as commit_exc:  # noqa: BLE001
+            errors.append(f"Failed to commit grants to database: {commit_exc}")
+            db.rollback()
     except Exception as exc:  # noqa: BLE001
+        errors.append(f"Curated grants ingestion error: {exc}")
         db.rollback()
-        errors.append(str(exc))
 
     project_dir = Path(__file__).resolve().parents[3]
     backend_dir = Path(__file__).resolve().parents[2]
