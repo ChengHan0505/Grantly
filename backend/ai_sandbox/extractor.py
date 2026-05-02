@@ -1,6 +1,6 @@
 """Extractor agent: SSM and financial evidence -> validated ``SMEProfile``.
 
-Uses GLM with a dynamically-injected Pydantic JSON schema so the model
+Uses Gemini with a dynamically-injected Pydantic JSON schema so the model
 knows exactly which fields, types, and enum values we expect.
 """
 

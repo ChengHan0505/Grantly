@@ -21,7 +21,7 @@ The Outcome: The SME has a clear, actionable roadmap to become eligible.
 ## Track B: The "Ready" SME (The Drafter)
 Trigger: Readiness score is high; core eligibility is met.
 The UI: Moves straight to the Grant Application Checklist.
-The AI Action (The Drafter Agent): As you brilliantly outlined, items are split into "Hard Docs" (requires manual upload) and "Soft Docs" (Pitch Decks, Proposals). The user clicks "Generate" on the soft docs. The Drafter Agent uses the GLM API to write the formal proposals based on the user's profile.
+The AI Action (The Drafter Agent): As you brilliantly outlined, items are split into "Hard Docs" (requires manual upload) and "Soft Docs" (Pitch Decks, Proposals). The user clicks "Generate" on the soft docs. The Drafter Agent uses Gemini to write the formal proposals based on the user's profile.
 The Outcome: The user clicks "Download Submission Package", yielding a clean ZIP file containing their hard docs and the AI-generated proposals, ready for manual submission.
 
 # Why This Pipeline Wins

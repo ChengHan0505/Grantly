@@ -64,6 +64,7 @@ from backend.src.database.db import (
     get_db,
     get_grant_by_id,
     get_user_by_id,
+    is_inline_review_document,
     list_grants,
     rank_grants_for_user,
     upsert_company_document,
@@ -1266,7 +1267,7 @@ async def generate_creative_pitch_deck_from_profile(payload: PitchDeckRequest):
     content, _plan = await build_creative_pitch_deck_pptx(
         payload.sme_profile,
         payload.grant_context,
-        api_key=settings.zai_api_key,
+        api_key=settings.google_api_key,
     )
     company = payload.sme_profile.get("company_name") or "sme"
     filename = payload.filename or f"{_slug(str(company))}_creative_pitch_deck.pptx"
@@ -1409,7 +1410,7 @@ async def get_application_roadmap(grant_id: int, user_id: int, db: Session = Dep
             timeout=18,
         )
         coach = coach_output.model_dump()
-        generated_by = "zai_coach_agent"
+        generated_by = "gemini_coach_agent"
     except Exception as exc:  # noqa: BLE001
         coach = snapshot.get("coach") or {
             "encouraging_message": f"Coach Agent fallback is active while live generation is unavailable: {str(exc)[:160]}",
@@ -1600,6 +1601,19 @@ async def evaluate_pitch_deck(
             detail=f"Failed to evaluate pitch deck: {str(exc)[:200]}",
         )
 
+    critique_payload = critique.model_dump() if hasattr(critique, "model_dump") else critique
+    pitch_deck_doc.metadata_json = {
+        **(pitch_deck_doc.metadata_json or {}),
+        "pitch_deck_evaluation": {
+            "grant_id": grant_id,
+            "evaluated_at": _utc_now_iso(),
+            "critique": critique_payload,
+        },
+    }
+    db.add(pitch_deck_doc)
+    db.commit()
+    db.refresh(pitch_deck_doc)
+
     return {
         "critique": critique,
         "evaluated_document": pitch_deck_doc,
@@ -1650,7 +1664,7 @@ async def draft_application_bundle(
             run_drafter(agent_sme_profile, _agent_grant_requirement(grant)),
             timeout=35,
         )
-        drafter_metadata["agent_mode"] = "zai_drafter"
+        drafter_metadata["agent_mode"] = "gemini_drafter"
         if agent_output.proposal:
             business_proposal = agent_output.proposal.business_proposal_markdown
         if agent_output.deck:
@@ -1750,17 +1764,20 @@ async def draft_application_bundle(
             drafter_metadata,
         ),
         pitch_deck_document,
-        _store_generated_markdown(
-            db,
-            user_id,
-            grant_id,
-            grant.title,
-            deck_document_type,
-            deck_document_name,
-            deck_markdown,
-            drafter_metadata,
-        ),
     ]
+    if not uploaded_deck_text:
+        generated_documents.append(
+            _store_generated_markdown(
+                db,
+                user_id,
+                grant_id,
+                grant.title,
+                deck_document_type,
+                deck_document_name,
+                deck_markdown,
+                drafter_metadata,
+            ),
+        )
 
     return {
         "business_proposal_markdown": business_proposal,
@@ -1795,9 +1812,9 @@ async def generate_and_store_application_pitch_deck(
         content, layout_plan = await build_creative_pitch_deck_pptx(
             profile_context,
             grant_context,
-            api_key=settings.zai_api_key,
+            api_key=settings.google_api_key,
         )
-        generation_mode = "zai_creative"
+        generation_mode = str(layout_plan.get("generation_mode") or "gemini_creative")
     else:
         slides = build_pitch_deck_slides(profile_context, grant_context)
         content = build_pitch_deck_pptx(profile_context, grant_context)
@@ -1922,8 +1939,11 @@ def download_submission_package(grant_id: int, user_id: int, db: Session = Depen
     package_documents = [
         document
         for document in documents
-        if document.document_type in requirement_types
-        or document.metadata_json.get("grant_id") == grant_id
+        if not is_inline_review_document(document)
+        and (
+            document.document_type in requirement_types
+            or document.metadata_json.get("grant_id") == grant_id
+        )
     ]
 
     buffer = io.BytesIO()

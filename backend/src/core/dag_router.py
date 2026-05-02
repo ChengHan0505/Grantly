@@ -262,9 +262,9 @@ def build_application_checklist(
             fulfillment_source = "generated:company_profile"
 
         can_generate = requirement.source_type == RequirementSource.GENERATED and not fulfilled
-        can_upload = requirement.source_type == RequirementSource.ATTACHED and not fulfilled
+        can_upload = requirement.source_type in {RequirementSource.ATTACHED, RequirementSource.GENERATED} and not fulfilled
         if can_generate:
-            action_label = "Generate document"
+            action_label = "Generate with AI or upload your own document"
             completion_status = "generatable"
         elif fulfilled:
             action_label = "Ready to download"

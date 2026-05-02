@@ -23,10 +23,58 @@ class Settings(BaseSettings):
         "and submission package assembly."
     )
     allowed_origins: list[str] = ["*"]
-    model_name: str = Field(default="ilmu-glm-5.1", validation_alias=AliasChoices("MODEL_NAME", "GLM_MODEL"))
-    zai_api_key: str = ""
-    zai_model: str = Field(default="ilmu-glm-5.1", validation_alias=AliasChoices("ZAI_MODEL", "GLM_MODEL"))
-    zai_base_url: str = "https://api.ilmu.ai/v1"
+    model_name: str = Field(
+        default="claude-sonnet-4-5-20250929",
+        validation_alias=AliasChoices("MODEL_NAME", "CLAUDE_SONNET_MODEL", "GEMINI_MODEL", "GOOGLE_MODEL"),
+    )
+    claude_sonnet_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("CLAUDE_SONNET_API_KEY", "ANTHROPIC_API_KEY"),
+    )
+    claude_sonnet_model: str = Field(
+        default="claude-sonnet-4-5-20250929",
+        validation_alias=AliasChoices("CLAUDE_SONNET_MODEL", "ANTHROPIC_MODEL"),
+    )
+    claude_sonnet_base_url: str = Field(
+        default="https://api.anthropic.com/v1",
+        validation_alias=AliasChoices("CLAUDE_SONNET_BASE_URL", "ANTHROPIC_BASE_URL"),
+    )
+    google_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    )
+    gemini_model: str = Field(
+        default="gemini-2.5-flash",
+        validation_alias=AliasChoices("GEMINI_MODEL", "GOOGLE_MODEL", "MODEL_NAME"),
+    )
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    openrouter_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "OPENROUTER_API_KEY",
+            "OPENROUTER_GEMINI_API_KEY",
+        ),
+    )
+    openrouter_model: str = Field(
+        default="google/gemini-2.5-flash",
+        validation_alias=AliasChoices("OPENROUTER_MODEL", "OPENROUTER_GEMINI_MODEL"),
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias=AliasChoices("OPENROUTER_BASE_URL"),
+    )
+    zai_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("ZAI_API_KEY", "Z_AI_API_KEY", "ZHIPUAI_API_KEY", "ILMU_API_KEY"),
+    )
+    zai_model: str = Field(
+        default="ilmu-glm-5.1",
+        validation_alias=AliasChoices("ZAI_MODEL", "GLM_MODEL"),
+    )
+    zai_base_url: str = Field(
+        default="https://api.ilmu.ai/v1",
+        validation_alias=AliasChoices("ZAI_BASE_URL", "GLM_BASE_URL"),
+    )
     readiness_threshold_percent: int = 80
     scout_enabled: bool = True
     scout_max_pages_per_source: int = 12

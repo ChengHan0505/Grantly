@@ -20,10 +20,10 @@ sers/stevehein/cursor/SME(UMHACK)/Grantly/ai_sandbox/extractor.py"
 ## evaluator.py
 
 ``` bash
-GLM API error. Retrying in 2.3s... (Attempt 2/3)
-GLM API error. Retrying in 2.3s... (Attempt 2/3)
-GLM API error. Retrying in 4.0s... (Attempt 3/3)
-GLM API error. Retrying in 4.0s... (Attempt 3/3)
+Gemini API error. Retrying in 2.3s... (Attempt 2/3)
+Gemini API error. Retrying in 2.3s... (Attempt 2/3)
+Gemini API error. Retrying in 4.0s... (Attempt 3/3)
+Gemini API error. Retrying in 4.0s... (Attempt 3/3)
 {
   "evidence_traces": [
     {

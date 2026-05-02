@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54" alt="Python" />
   <img src="https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite" />
   <img src="https://img.shields.io/badge/Firebase-039BE5?style=for-the-badge&logo=firebase" alt="Firebase" />
-  <img src="https://img.shields.io/badge/Z.AI%20GLM-6B4EFF?style=for-the-badge&logoColor=white" alt="Z.AI GLM" />
+  <img src="https://img.shields.io/badge/Gemini%202.5%20Flash-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini 2.5 Flash" />
 </div>
 
 ---
@@ -127,7 +127,7 @@ Grantly uses a separated frontend and backend architecture with shared API contr
 
 ### AI & Agent Layer
 
-<img src="https://img.shields.io/badge/Z.AI%20GLM-6B4EFF?style=for-the-badge&logoColor=white" alt="Z.AI GLM" />
+<img src="https://img.shields.io/badge/Gemini%202.5%20Flash-4285F4?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini 2.5 Flash" />
 
 * **Extractor Agent**: Generates structured SME profile fields from questionnaire answers and document evidence.
 * **Scout Agent**: Extracts grant records from curated files and configured sources, with fallback parsing when LLM extraction is unavailable.
@@ -177,10 +177,18 @@ pip install -r backend\requirements.txt
 Create a `.env` file in the project root. You can start from `.env.example`:
 
 ```env
+CLAUDE_SONNET_API_KEY=your_anthropic_claude_api_key
+CLAUDE_SONNET_MODEL=claude-sonnet-4-5-20250929
+OPENROUTER_GEMINI_API_KEY=your_openrouter_gemini_api_key
+OPENROUTER_GEMINI_MODEL=google/gemini-2.5-flash
+OPENROUTER_FALLBACK_ENABLED=true
+GOOGLE_API_KEY=your_google_ai_studio_api_key
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 ZAI_API_KEY=your_zai_api_key
+ZAI_FALLBACK_ENABLED=true
 ZAI_BASE_URL=https://api.ilmu.ai/v1
 ZAI_MODEL=ilmu-glm-5.1
-GLM_MODEL=ilmu-glm-5.1
 SCOUT_SOURCE_FILE=backend/data/scout_sources.json
 NEXT_PUBLIC_BACKEND_BASE_URL=http://localhost:8000
 ```
@@ -225,8 +233,8 @@ npm run build
 # Run frontend lint
 npm run lint
 
-# Test Z.AI key from the backend agent package
-.\.venv\Scripts\python.exe -m backend.ai_sandbox.test_zai_key
+# Test Claude primary / Gemini fallback from the backend agent package
+.\.venv\Scripts\python.exe -m backend.ai_sandbox.test_gemini_key
 ```
 
 ---

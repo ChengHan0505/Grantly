@@ -37,7 +37,7 @@ Returns backend status and model metadata.
 ```json
 {
   "status": "online",
-  "model": "ilmu-glm-5.1",
+  "model": "gemini-2.5-flash",
   "service": "Grantly"
 }
 ```
@@ -221,7 +221,7 @@ Response: PowerPoint file download.
 
 ### `POST /grants/drafter/pitch-deck/creative`
 
-Uses Z.AI to create a compact creative layout plan, then renders it into `.pptx` locally. Set `ZAI_API_KEY` in `.env` or your console; do not send the token in the JSON body.
+Uses Gemini 2.5 Flash to create a compact creative layout plan, then renders it into `.pptx` locally. Set `GOOGLE_API_KEY` in `.env` or your console; do not send the token in the JSON body.
 
 Request body is the same as `POST /grants/drafter/pitch-deck`.
 
@@ -364,7 +364,7 @@ Response:
 
 ### `POST /grants/{grant_id}/application/{user_id}/pitch-deck/generate`
 
-Calls Z.AI with `ZAI_API_KEY` from backend settings, renders the creative slide plan into `.pptx`, and stores the file in the user's document database as a generated `pitch_deck` document.
+Calls Gemini 2.5 Flash with `GOOGLE_API_KEY` from backend settings, renders the creative slide plan into `.pptx`, and stores the file in the user's document database as a generated `pitch_deck` document.
 
 Request:
 
@@ -386,7 +386,7 @@ Response:
     "file_name": "yap_mdec_pitch_deck.pptx",
     "status": "generated",
     "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    "generation_mode": "zai_creative",
+    "generation_mode": "gemini_creative",
     "created_at": "2026-04-25T12:00:00"
   },
   "download_url": "/grants/1/application/1/documents/8/download",
