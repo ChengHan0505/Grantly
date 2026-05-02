@@ -31,7 +31,7 @@ The frontend reads public runtime configuration from:
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 
-See the root `.env.example` for expected values.
+Put these values in `frontend/.env.local` when running the Next.js app from this workspace. The root `.env.local` is not automatically loaded by the frontend package.
 
 ## Scripts
 
